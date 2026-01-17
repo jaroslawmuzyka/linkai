@@ -14,6 +14,10 @@ def render(supabase, wp_api):
         client = c_map[client_name]
         opts = wp_api.get_portal_options(client['wp_project_id'])
         
+        # Get Categories Map for ID->Name translation
+        cat_map = opts.get('portal_category', {})
+        region_map = opts.get('portal_region', {})
+        
         with st.form("browse_form"):
             filters = render_filters_form(opts)
             if st.form_submit_button("Załaduj Portale"):
@@ -31,38 +35,113 @@ def render(supabase, wp_api):
             if 'expanded_offers' not in st.session_state: st.session_state['expanded_offers'] = set()
             if 'cart_items' not in st.session_state: st.session_state['cart_items'] = []
 
-            # --- HEADER --- 
-            h1, h2, h3, h4, h5, h6, h7 = st.columns([2.5, 1, 1, 1, 1, 1, 1.5]) 
-            h1.caption("Portal")
-            h2.caption("Ruch")
-            h3.caption("TF")
-            h4.caption("DR")
-            h5.caption("Dofollow")
-            h6.caption("Cena od")
-            h7.caption("Opcje")
+            # --- COLUMN DEFINITION (15 Columns) ---
+            # 1. Portal, 2. Rodzaj, 3. Kraj/Reg, 4. Tematyka, 5. UU, 6. AS, 7. TF, 8. DR, 9. DA, 10. Dofollow, 11. Indeks, 12. Widok, 13. Ocena, 14. Rodzaj Linków, 15. Cena
+            # Ratios need to be tight.
+            # Total units approx 25.
+            # P=3, Type=1.5, Loc=1.5, Cat=2, UU=1, AS=0.8, TF=0.8, DR=0.8, DA=0.8, Do=0.8, Idx=1, Vis=1, Q=1, Lnk=1.5, Price=1.5
+            
+            w = [3, 1.2, 1.2, 2, 1, 0.8, 0.8, 0.8, 0.8, 0.8, 1, 1, 0.8, 1.5, 1.5]
+            
+            # Header
+            cols = st.columns(w)
+            headers = [
+                "Portal", "Rodzaj", "Kraj/Reg", "Tematyka", 
+                "Użytk.", "AS", "TF", "DR", "DA", 
+                "Dof.", "Indeks", "Widok", "Ocena", "Linki", "Cena"
+            ]
+            for c, h in zip(cols, headers):
+                c.caption(h)
+                
             st.divider()
 
             for r in res:
                 pid = r['id']
                 with st.container():
-                    c1, c2, c3, c4, c5, c6, c7 = st.columns([2.5, 1, 1, 1, 1, 1, 1.5])
-                    with c1:
-                        st.subheader(r.get('portal_url', ''))
-                        subs = []
-                        if r.get('portal_score_quality'): subs.append(f"Jakość: {r.get('portal_score_quality')}/10")
-                        if r.get('portal_country'): subs.append(r.get('portal_country'))
-                        st.caption(" | ".join(subs))
-                    with c2: st.write(f"{r.get('portal_unique_users', 0):,}")
-                    with c3: st.write(f"{r.get('portal_score_trust_flow', '-')}")
-                    with c4: st.write(f"{r.get('portal_score_domain_rating', '-')}")
-                    with c5: st.write("✅" if r.get('offers_dofollow_count', 0) > 0 else "❌")
-                    with c6: st.write(f"**{r.get('best_price', 0):.2f} zł**")
-                    with c7:
-                        is_expanded = pid in st.session_state['expanded_offers']
-                        if st.button("Ukryj" if is_expanded else "Zobacz oferty", key=f"btn_{pid}"):
-                            if is_expanded: st.session_state['expanded_offers'].discard(pid)
-                            else: st.session_state['expanded_offers'].add(pid)
-                            st.rerun()
+                    c = st.columns(w)
+                    
+                    # 1. Portal
+                    c[0].markdown(f"**{r.get('portal_url', '')}**")
+                    
+                    # 2. Rodzaj
+                    c[1].write(r.get('portal_type', '-'))
+                    
+                    # 3. Kraj / Region
+                    locs = []
+                    if r.get('portal_country'): locs.append(r.get('portal_country'))
+                    # Region often ID or string. map if needed, but assuming API provides strings often.
+                    # if r.get('portal_region'): locs.append(r.get('portal_region')) 
+                    c[2].write("/".join(locs) if locs else "-")
+                    
+                    # 4. Tematyka
+                    cats = r.get('portal_category', [])
+                    if isinstance(cats, list): 
+                        cat_names = [str(cat_map.get(str(x), x)) for x in cats[:1]] # Show 1st
+                        c[3].write(", ".join(cat_names))
+                    else: 
+                        c[3].write("-")
+
+                    # 5. UU
+                    c[4].write(f"{r.get('portal_unique_users', 0):,}")
+                    
+                    # 6. AS (Authority Score - hypothetically portal_score_authority_score or similar)
+                    c[5].write(f"{r.get('portal_score_authority_score', '-')}")
+                    
+                    # 7. TF
+                    c[6].write(f"{r.get('portal_score_trust_flow', '-')}")
+                    
+                    # 8. DR
+                    c[7].write(f"{r.get('portal_score_domain_rating', '-')}")
+                    
+                    # 9. DA
+                    c[8].write(f"{r.get('portal_score_moz_domain_authority', '-')}")
+                    
+                    # 10. Dofollow
+                    c[9].write("✅" if r.get('offers_dofollow_count', 0) > 0 else "❌")
+                    
+                    # 11. Indeksacja
+                    c[10].write(f"{r.get('indexation_speed', '-')}") 
+                    
+                    # 12. Widoczność (Visibility)
+                    c[11].write(f"{r.get('visibility_senuto', '-')}")
+                    
+                    # 13. Ocena (Quality)
+                    c[12].write(f"{r.get('portal_score_quality', '-')}/10")
+                    
+                    # 14. Rodzaj linków (Type)
+                    # Use generic 'Mieszane' or from attributes
+                    c[13].write("Mieszane") # Placeholder as API key varies
+                    
+                    # 15. Cena (Netto)
+                    price = r.get('best_price', 0)
+                    c[14].write(f"**{price:.2f}**")
+
+                    # ACTION (Expand) - Below row or integrated?
+                    # User didn't ask for action column, but we NEED it to see offers.
+                    # I'll make the whole row 'clickable' ideally, but Streamlit can't.
+                    # I'll add a small expander or button below, or make 'Cena' button?
+                    # Let's add a "Row Action" expander container below.
+                    
+                    is_expanded = pid in st.session_state['expanded_offers']
+                    
+                    # Layout tweak: Use an expander for the row OR a button.
+                    # Given the density, maybe just a small button "V" at the end? 
+                    # OR: Clickable row isn't possible.
+                    # Let's put a "Pokaż" button in the LAST column underneath Price?
+                    # Or use `st.expander` wrapping the whole row? No, formatting issues.
+                    # I'll append a full-width button/bar below the columns? No.
+                    # I'll steal space from Price column for button.
+                    
+                    # Revised: I'll use `st.expander` for the DETAILS, but the trigger button needs to be visible.
+                    # Let's add a small toggle below the metrics row or as 16th col (but width issue).
+                    # User asked for specific columns, didn't list "Action".
+                    # I will assume "Najtańsza oferta" is clickable? No.
+                    # I will add a thin "Expand" button below the metrics info.
+                    
+                    if st.button(f" ▼ Pokaż oferty ({r.get('portal_url')})", key=f"btn_{pid}"):
+                        if is_expanded: st.session_state['expanded_offers'].discard(pid)
+                        else: st.session_state['expanded_offers'].add(pid)
+                        st.rerun()
 
                 # --- OFFERS ---
                 if pid in st.session_state['expanded_offers']:

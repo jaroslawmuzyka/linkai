@@ -36,14 +36,18 @@ def render(supabase, wp_api):
                 for p in portals:
                     price = float(p.get('best_price', 0))
                     if price <= 0: continue
-                    dr = int(p.get('portal_score_domain_rating', 0))
                     candidates.append({
                         "wp_portal_id": p.get('id'),
                         "portal_name": p.get('name'),
                         "portal_url": p.get('portal_url', ''),
                         "price": price,
-                        "metrics": {"dr": dr},
-                        "score": (dr * 2) / price
+                        "metrics": {
+                            "dr": int(p.get('portal_score_domain_rating', 0)),
+                            "tf": int(p.get('portal_score_trust_flow', 0)),
+                            "uu": p.get('portal_unique_users', 0)
+                        },
+                        "full_data": p, # Store full obj for display
+                        "score": (int(p.get('portal_score_domain_rating', 0)) * 2) / price
                     })
                 candidates.sort(key=lambda x: x['score'], reverse=True)
                 
@@ -72,12 +76,37 @@ def render(supabase, wp_api):
             final_list = []
             running_cost = 0
             
+            # --- HEADER ROW (Simplified for Generator) ---
+            # Generator needs to be succinct, but user asked for columns here too.
+            # We will use a subset or full set if possible. 
+            # Layout: Expander Title = URL + Price. 
+            # Inside Expander: Full Columns Row + Offer Selection.
+            
             for idx, item in enumerate(candidates):
                 pid = item['wp_portal_id']
+                p = item['full_data']
                 
-                # Cleaner Row
-                with st.expander(f"{idx+1}. {item['portal_url']} (DR: {item['metrics']['dr']})", expanded=(idx==0)):
-                    col_det, col_sel = st.columns([1, 2]) # Adjusted ratio for better form view
+                # Title Bar
+                title = f"{idx+1}. {item['portal_url']} | DR: {item['metrics']['dr']} | Cena: {item['price']:.2f} zł"
+                with st.expander(title, expanded=(idx==0)):
+                    
+                    # Columns Info Row
+                    # Portal | Rodzaj | UU | TF | DR | Dofollow | Index | Content | Price
+                    cw = [2, 1, 1, 1, 1, 1, 1, 1, 1]
+                    cinfo = st.columns(cw)
+                    cinfo[0].caption("Portal"); cinfo[0].write(p.get('portal_url'))
+                    cinfo[1].caption("Rodzaj"); cinfo[1].write(p.get('portal_type', '-'))
+                    cinfo[2].caption("UU"); cinfo[2].write(f"{p.get('portal_unique_users',0):,}")
+                    cinfo[3].caption("TF"); cinfo[3].write(p.get('portal_score_trust_flow','-'))
+                    cinfo[4].caption("DR"); cinfo[4].write(p.get('portal_score_domain_rating','-'))
+                    cinfo[5].caption("Dofollow"); cinfo[5].write("✅" if p.get('offers_dofollow_count',0)>0 else "❌")
+                    cinfo[6].caption("Index"); cinfo[6].write(p.get('indexation_speed', '-'))
+                    cinfo[7].caption("Ocena"); cinfo[7].write(f"{p.get('portal_score_quality', '-')}/10")
+                    cinfo[8].caption("Cena"); cinfo[8].write(f"{p.get('best_price',0):.2f}")
+                    st.divider()
+                    
+                    # Offer Selection
+                    col_det, col_sel = st.columns([1, 2])
                     
                     cache_key = f"gen_offers_{pid}"
                     if cache_key not in st.session_state:
@@ -99,10 +128,7 @@ def render(supabase, wp_api):
                         sel_k = st.selectbox("Wybierz ofertę", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
                         sel_o = offer_opts[sel_k]
                         
-                        # RENDER THE FULL DETAILS BLOCK HERE
                         st.markdown("---")
-                        # Use our nice shared function to show details
-                        # u_id/in_cart not needed for display only
                         render_offer_details(sel_o, u_id="dummy", in_cart=False, show_actions=False)
 
                 # Add to final list

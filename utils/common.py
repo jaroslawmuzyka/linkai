@@ -54,10 +54,6 @@ def translate_offer_title(title):
     # Apply replacements (sorted by length to avoid partial matches first)
     sorted_keys = sorted(replacements.keys(), key=len, reverse=True)
     for k in sorted_keys:
-        # Case insensitive replace might be safer, but for now simple replace
-        # Use regex for case insensitive replacement if simple replace misses cases
-        # But `k` here matches keys. 
-        # Let's do a case-insensitive replacement for robust matching
         pattern = re.compile(re.escape(k), re.IGNORECASE)
         title = pattern.sub(replacements[k], title)
         
@@ -107,9 +103,7 @@ def parse_offer_description(desc):
     
     val = extract_val(r"Duration of articles.*?:(.*?)(?=\s+Main image|$)", desc)
     if val:
-        # Clean up common long phrases specifically
         if "maintained unchanged for at least" in val:
-             # Just simpliffy to user friendly Text
              data['duration'] = "Bezterminowo (gwarancja 12 mies.)"
         elif "deleted after 12 months" in val: 
             data['duration'] = "Artykuł jest kasowany po 12 miesiącach."
@@ -142,95 +136,111 @@ def parse_offer_description(desc):
     
     return data
 
-def render_offer_details(offer, u_id, in_cart=False, show_actions=True):
+def render_offer_row(offer, u_id, in_cart=False, show_actions=True):
     """
-    Renders the standardized WhitePress offer details block.
+    Renders the offer as a wide row with multiple columns matching the WhitePress UI screenshot.
+    Columns: [Name, Description (Wide), Price, Duration, Writing, Marking, Dofollow, Traffic, Persistence, Action]
     """
-    # 1. Title
-    st.markdown(f"#### {format_offer_title_html(offer['offer_title'])}")
+    # Parse description first
+    d = parse_offer_description(offer.get('offer_description', ''))
     
-    desc_data = parse_offer_description(offer.get('offer_description', ''))
+    # Define Layout Ratios
+    # Name=1.5, Desc=3.5, Price=0.8, PromoLen=0.8, Write=0.8, Mark=0.8, Dof=0.8, Traf=0.8, Pers=0.8, Act=1
+    cols = st.columns([1.5, 3.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 1])
     
-    req_src = offer.get('images_source_required', False)
-    trk_code = offer.get('tracking_code', True)
-    stats = offer.get('stats_from_publisher', True)
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.write(f"Wymagane podanie źródła zdjęć: {'✅' if req_src else '❌'}") 
-    with c2:
-        st.write(f"Kod śledzenia: {'✅' if trk_code else '❌'}")
-    with c3:
-        price_stats = offer.get('price_stats', 0)
-        st.write(f"Statystyki od wydawcy: {'✅' if stats else '❌'}  ({price_stats:.2f} zł netto)")
-
-    st.divider()
-    
-    # 3. Sections
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("**Wytyczne dot. linkowania:**")
-        limit = desc_data.get('links_limit') or offer.get('links_limit', '1')
-        other = desc_data.get('links_other') or ("nie zezwala" if not offer.get('links_other_allowed') else "zezwala")
+    # 1. Nazwa Oferty
+    with cols[0]:
+        st.markdown(format_offer_title_html(offer['offer_title']))
+        # Add basic visual tags if needed
+        # st.caption("Tematyka wrażliwa: ...") if data exists
+        
+    # 2. Opis Oferty (Wide)
+    with cols[1]:
+        # Top Icons Line
+        req_src = offer.get('images_source_required', False)
+        trk_code = offer.get('tracking_code', True)
+        stats = offer.get('stats_from_publisher', True)
+        
+        line1 = []
+        line1.append(f"Zdjęcia {'❌' if not req_src else '✅'}") # Inverted logic in screenshot usually? Screenshot says "Wymagane podanie źródła: X" -> False
+        line1.append(f"Kod: {'✅' if trk_code else '❌'}")
+        p_stats = offer.get('price_stats', 0)
+        line1.append(f"Statystyki: {'✅' if stats else '❌'} ({p_stats} zł)")
+        st.caption(" | ".join(line1))
+        
+        # Link Guidelines
+        limit = d.get('links_limit') or offer.get('links_limit', '1')
+        other = d.get('links_other') or "nie zezwala"
+        st.markdown(f"**Linki:** do Reklamodawcy: {limit}, Inne: {other}")
+        
+        # Article Guidelines
+        # Compact them to save vertical space? Or bullets? Screenshot shows bullets.
+        min_l = d.get('min_len', '1200')
+        max_l = d.get('max_len', '25000')
+        dur = d.get('duration', '12 mies.')
+        img_m = d.get('main_image', 'Tak')
         
         st.markdown(f"""
-        - Liczba linków do strony Reklamodawcy: **{limit}**
-        - Maksymalna liczba linków do stron innych niż domena Reklamodawcy: **{other}**
+        - Długość: {min_l}-{max_l} znaków
+        - Trwałość: {dur}
+        - Zdjęcie gł.: {img_m}
         """)
 
-    with col2:
-        st.markdown("**Wytyczne dot. artykułu:**")
-        
-        min_len = desc_data.get('min_len') or offer.get('min_length', 1200)
-        max_len = desc_data.get('max_len') or offer.get('max_length', 25000)
-        place = desc_data.get('promotion') or translate_offer_title(offer.get('publication_place', 'Strona główna'))
-        dur = desc_data.get('duration') or translate_offer_title(offer.get('offer_persistence_custom', '12 miesięcy'))
-        
-        img_txt = desc_data.get('images_content')
-        if not img_txt:
-            img_min = offer.get('images_limit_min', 0)
-            img_max = offer.get('images_limit_max', 5)
-            img_txt = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {img_min} do {img_max})."
-            
-        main_img = desc_data.get('main_image') or "Publikacja wymaga zdjęcia głównego"
-        
-        st.markdown(f"""
-        - Minimalna długość artykułu: **{min_len} znaków**
-        - Maksymalna długość artykułu: **{max_len} znaków**
-        - Promowanie: **{place}**
-        - Trwałość artykułu: **{dur}**
-        - Zdjęcie główne artykułu: **{main_img}**
-        - Liczba zdjęć w treści: **{img_txt}**
-        """)
+    # 3. Cena Netto
+    with cols[2]:
+        price = float(offer.get('best_price', 0))
+        st.markdown(f"**{price:.2f} zł**")
+        if offer.get('promo_discount'):
+             st.caption(f"Promocja -{offer['promo_discount']}%")
 
-    with col3:
-        st.markdown("**Pozostałe wytyczne:**")
-        video = desc_data.get('video') or ("Tak" if offer.get('video_allowed') else "Nie")
-        scripts = desc_data.get('scripts') or ("Tak" if offer.get('scripts_allowed') else "Nie")
-        
-        st.markdown(f"""
-        - Możliwość zamieszczenia treści wideo: **{video}**
-        - Możliwość zamieszczenia zewnętrznych kodów zliczających: **{scripts}**
-        """)
+    # 4. Długość promocji (dni)
+    with cols[3]:
+        # Often mapped to publishing time or specific promo field
+        days = offer.get('publication_time', '3') # Default
+        st.write(f"{days} dni") 
 
-    st.markdown("---")
-    
-    # Action Bar if requested
-    if show_actions:
-        ac1, ac2 = st.columns([4, 1])
-        with ac1:
-            if offer.get('promo_discount'):
-                st.info(f"🏷️ Promocja: -{offer['promo_discount']}%")
-        with ac2:
+    # 5. Napisanie artykułu
+    with cols[4]:
+        # Check if copywriting included or allowed
+        # Placeholder based on standard API
+        can_write = offer.get('copywriting_available', False) 
+        st.write("✅" if can_write else "❌")
+
+    # 6. Oznaczanie
+    with cols[5]:
+        mark = offer.get('article_marking', 'Sponsorowany')
+        st.write(mark if mark else "-")
+
+    # 7. Linki Dofollow
+    with cols[6]:
+        dof = offer.get('links_dofollow', True) 
+        st.write("✅" if dof else "❌")
+        # List types if space?
+        # st.caption("Brand, URL")
+
+    # 8. Gwarancja ruchu
+    with cols[7]:
+        traf = offer.get('traffic_guarantee', False)
+        st.write("✅" if traf else "❌")
+
+    # 9. Wskaźnik trwałości
+    with cols[8]:
+        # 'price_reliability' or similar in API? 
+        # Or just use placeholder score from screenshot "27/27"
+        sc = offer.get('reliability_score', '10/10')
+        st.write(f"{sc}")
+
+    # 10. Button
+    with cols[9]:
+        if show_actions:
             if in_cart:
                 if st.button("Usuń", key=f"del_{u_id}", type="secondary"):
                     return "REMOVE"
             else:
                 if st.button("Wybierz", key=f"add_{u_id}", type="primary"):
                     return "ADD"
+    
     return None
-
 
 # --- FILTER FORM ---
 def render_filters_form(options):

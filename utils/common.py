@@ -17,6 +17,7 @@ def translate_offer_title(title):
         "1 day": "1 dzień",
         "12 months": "12 miesięcy",
         "Permanent": "Bezterminowo",
+        "Long-term": "Bezterminowo",
         "days": "dni",
         "months": "miesięcy",
         "month": "miesiąc",
@@ -27,11 +28,15 @@ def translate_offer_title(title):
         "3 links": "3 linki",
         "4 links": "4 linki",
         "links": "linki",
+        "multiple links": "wiele linków",
+        "multiple linki": "wiele linków", # catch partial
         "NOFOLLOW": "NOFOLLOW",
         "DOFOLLOW": "DOFOLLOW",
         
         # Types
         "All link types": "Wszystkie rodzaje linków",
+        "Many types of links": "Różne rodzaje linków",
+        "Many types of linki": "Różne rodzaje linków", # catch partial
         "Standard link": "Link standardowy",
         "Brand links": "Linki brandowe",
         "Generic links": "Linki generyczne",
@@ -39,14 +44,22 @@ def translate_offer_title(title):
         "Graphic links": "Linki graficzne",
         "Mixed links": "Linki mieszane",
         "Exact Match Link": "EML - Exact Match Link",
-        "Match Link": "Match Link"
+        "Match Link": "Match Link",
+        
+        # Long Description Phrases
+        "Long-term publication - maintained unchanged for at least": "Publikacja długoterminowa - bez zmian przez min.",
+        "after this time, the Publisher aims to maintain it for as long as possible": "po tym czasie Wydawca utrzymuje tak długo jak to możliwe"
     }
     
     # Apply replacements (sorted by length to avoid partial matches first)
     sorted_keys = sorted(replacements.keys(), key=len, reverse=True)
     for k in sorted_keys:
         # Case insensitive replace might be safer, but for now simple replace
-        title = title.replace(k, replacements[k])
+        # Use regex for case insensitive replacement if simple replace misses cases
+        # But `k` here matches keys. 
+        # Let's do a case-insensitive replacement for robust matching
+        pattern = re.compile(re.escape(k), re.IGNORECASE)
+        title = pattern.sub(replacements[k], title)
         
     return title
 
@@ -94,10 +107,16 @@ def parse_offer_description(desc):
     
     val = extract_val(r"Duration of articles.*?:(.*?)(?=\s+Main image|$)", desc)
     if val:
-        if "deleted after 12 months" in val: data['duration'] = "Artykuł jest kasowany po 12 miesiącach."
-        elif "after 12 months" in val: data['duration'] = "12 miesięcy"
-        elif "Permanent" in val or "lifetime" in val: data['duration'] = "Bezterminowo"
-        else: data['duration'] = translate_offer_title(val)
+        # Clean up common long phrases specifically
+        if "maintained unchanged for at least" in val:
+             # Just simpliffy to user friendly Text
+             data['duration'] = "Bezterminowo (gwarancja 12 mies.)"
+        elif "deleted after 12 months" in val: 
+            data['duration'] = "Artykuł jest kasowany po 12 miesiącach."
+        elif "Permanent" in val or "lifetime" in val: 
+            data['duration'] = "Bezterminowo"
+        else: 
+            data['duration'] = translate_offer_title(val)
 
     val = extract_val(r"Main image of the article:\s*(.*?)(?=\s+Number of images|$)", desc)
     if val:

@@ -1,6 +1,6 @@
 import streamlit as st
 from services.auth import check_password
-from services.db import init_supabase, supabase as sb_instance # Use singleton if possible or init here
+from services.db import init_supabase
 from services.whitepress import WhitePressAPI
 from views import dashboard, sync, campaign_gen, portal_browser, campaign_overview, content_planner, publication
 

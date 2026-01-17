@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils.common import render_filters_form, translate_offer_title, render_offer_details
+from utils.common import render_filters_form, translate_offer_title, render_offer_row
 
 def render(supabase, wp_api):
     st.title("Generator Kampanii")
@@ -46,7 +46,7 @@ def render(supabase, wp_api):
                             "tf": int(p.get('portal_score_trust_flow', 0)),
                             "uu": p.get('portal_unique_users', 0)
                         },
-                        "full_data": p, # Store full obj for display
+                        "full_data": p, 
                         "score": (int(p.get('portal_score_domain_rating', 0)) * 2) / price
                     })
                 candidates.sort(key=lambda x: x['score'], reverse=True)
@@ -76,11 +76,8 @@ def render(supabase, wp_api):
             final_list = []
             running_cost = 0
             
-            # --- HEADER ROW (Simplified for Generator) ---
-            # Generator needs to be succinct, but user asked for columns here too.
-            # We will use a subset or full set if possible. 
-            # Layout: Expander Title = URL + Price. 
-            # Inside Expander: Full Columns Row + Offer Selection.
+            # --- HEADER ROW for Expanded Items inside Generator ---
+            # Using similar condensed logic as step 177 but adapted for new render_offer_row usage
             
             for idx, item in enumerate(candidates):
                 pid = item['wp_portal_id']
@@ -90,8 +87,7 @@ def render(supabase, wp_api):
                 title = f"{idx+1}. {item['portal_url']} | DR: {item['metrics']['dr']} | Cena: {item['price']:.2f} zł"
                 with st.expander(title, expanded=(idx==0)):
                     
-                    # Columns Info Row
-                    # Portal | Rodzaj | UU | TF | DR | Dofollow | Index | Content | Price
+                    # Columns Info Row (Condensed)
                     cw = [2, 1, 1, 1, 1, 1, 1, 1, 1]
                     cinfo = st.columns(cw)
                     cinfo[0].caption("Portal"); cinfo[0].write(p.get('portal_url'))
@@ -106,7 +102,11 @@ def render(supabase, wp_api):
                     st.divider()
                     
                     # Offer Selection
-                    col_det, col_sel = st.columns([1, 2])
+                    # We use render_offer_row to show details. It's wide (10 cols).
+                    # Inside an expander, Streamlit handles scrolling/width mostly fine.
+                    # We might need to stack selection above it.
+                    
+                    col_sel, _ = st.columns([1, 1])
                     
                     cache_key = f"gen_offers_{pid}"
                     if cache_key not in st.session_state:
@@ -125,11 +125,17 @@ def render(supabase, wp_api):
                         
                         def_key = next((k for k, v in offer_opts.items() if abs(float(v.get('best_price',0)) - item['price']) < 0.1), list(offer_opts.keys())[0])
                         
-                        sel_k = st.selectbox("Wybierz ofertę", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
-                        sel_o = offer_opts[sel_k]
+                        # Selection Box
+                        with col_sel:
+                             sel_k = st.selectbox("Zmień ofertę:", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
+                             sel_o = offer_opts[sel_k]
                         
                         st.markdown("---")
-                        render_offer_details(sel_o, u_id="dummy", in_cart=False, show_actions=False)
+                        # Use the NEW tabular render function (show_actions=False usually for generator since we select by dropdown above, 
+                        # OR we could hide the dropdown and use the buttons? 
+                        # Generator flow usually implies picking ONE final state.
+                        # Using dropdown + display details is safer for "tuning".
+                        render_offer_row(sel_o, u_id="dummy", in_cart=False, show_actions=False) 
 
                 # Add to final list
                 final_item = item.copy()

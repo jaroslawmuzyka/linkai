@@ -70,40 +70,28 @@ def parse_offer_description(desc):
     """
     if not desc: return {}
     
-    # Define markers to split or regex extract
-    # Map English phrase -> Polish Key
-    
     data = {}
-    
-    # Helper regex extraction
     def extract_val(pattern, text):
         m = re.search(pattern, text, re.IGNORECASE)
         return m.group(1).strip() if m else None
 
-    # Mapping based on user provided text
-    # "Number of links to the Advertiser's website: 1"
+    # Extraction Logic
     val = extract_val(r"Number of links to the Advertiser's website:\s*(.*?)(?=\s+Maximum|Minimum|$)", desc)
     if val: data['links_limit'] = val
     
-    # "Maximum number of links to pages other than the Advertiser's domain: does not allow"
     val = extract_val(r"Maximum number of links to pages other than the Advertiser's domain:\s*(.*?)(?=\s+Minimum|Maximum|$)", desc)
     if val: data['links_other'] = "nie zezwala" if "does not allow" in val.lower() else val
     
-    # "Minimum length of the article (characters with spaces): 1200"
     val = extract_val(r"Minimum length of the article.*?:(\d+)\s*characters", desc) # Simplified regex
     if not val: val = extract_val(r"Minimum length of the article.*?:(\d+)", desc)
     if val: data['min_len'] = val
     
-    # "Maximum length of the article (characters with spaces): 25000"
     val = extract_val(r"Maximum length of the article.*?:(\d+)", desc)
     if val: data['max_len'] = val
     
-    # "Promoting: Home page"
     val = extract_val(r"Promoting:\s*(.*?)(?=\s+Duration|Trwałość|$)", desc)
     if val: data['promotion'] = translate_offer_title(val)
     
-    # "Duration of articles... : The article is deleted after 12 months"
-    # User example: "Artykuł jest kasowany po 12 miesiącach"
     val = extract_val(r"Duration of articles.*?:(.*?)(?=\s+Main image|$)", desc)
     if val:
         if "deleted after 12 months" in val: data['duration'] = "Artykuł jest kasowany po 12 miesiącach."
@@ -111,16 +99,13 @@ def parse_offer_description(desc):
         elif "Permanent" in val or "lifetime" in val: data['duration'] = "Bezterminowo"
         else: data['duration'] = translate_offer_title(val)
 
-    # "Main image of the article: Publication requires a main photo..."
     val = extract_val(r"Main image of the article:\s*(.*?)(?=\s+Number of images|$)", desc)
     if val:
         if "requires a main photo" in val: data['main_image'] = "Publikacja wymaga zdjęcia głównego"
         else: data['main_image'] = translate_offer_title(val)
 
-    # "Number of images in content: The article does not have to, but can have images (from 1 to 5)."
     val = extract_val(r"Number of images in content:\s*(.*?)(?=\s+Possibility|$)", desc)
     if val:
-        # Translate complex string
         if "does not have to, but can have images" in val:
             nums = re.search(r"\(from (\d+) to (\d+)\)", val)
             if nums:
@@ -130,15 +115,103 @@ def parse_offer_description(desc):
         else:
             data['images_content'] = val
 
-    # "Possibility of posting video content: No"
     val = extract_val(r"Possibility of posting video content:\s*(.*?)(?=\s+Possibility|$)", desc)
     if val: data['video'] = translate_bool(val)
 
-    # "Possibility of placing external counting...: No"
     val = extract_val(r"Possibility of placing external counting.*?:(.*?)$", desc)
     if val: data['scripts'] = translate_bool(val)
     
     return data
+
+def render_offer_details(offer, u_id, in_cart=False, show_actions=True):
+    """
+    Renders the standardized WhitePress offer details block.
+    """
+    # 1. Title
+    st.markdown(f"#### {format_offer_title_html(offer['offer_title'])}")
+    
+    desc_data = parse_offer_description(offer.get('offer_description', ''))
+    
+    req_src = offer.get('images_source_required', False)
+    trk_code = offer.get('tracking_code', True)
+    stats = offer.get('stats_from_publisher', True)
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.write(f"Wymagane podanie źródła zdjęć: {'✅' if req_src else '❌'}") 
+    with c2:
+        st.write(f"Kod śledzenia: {'✅' if trk_code else '❌'}")
+    with c3:
+        price_stats = offer.get('price_stats', 0)
+        st.write(f"Statystyki od wydawcy: {'✅' if stats else '❌'}  ({price_stats:.2f} zł netto)")
+
+    st.divider()
+    
+    # 3. Sections
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**Wytyczne dot. linkowania:**")
+        limit = desc_data.get('links_limit') or offer.get('links_limit', '1')
+        other = desc_data.get('links_other') or ("nie zezwala" if not offer.get('links_other_allowed') else "zezwala")
+        
+        st.markdown(f"""
+        - Liczba linków do strony Reklamodawcy: **{limit}**
+        - Maksymalna liczba linków do stron innych niż domena Reklamodawcy: **{other}**
+        """)
+
+    with col2:
+        st.markdown("**Wytyczne dot. artykułu:**")
+        
+        min_len = desc_data.get('min_len') or offer.get('min_length', 1200)
+        max_len = desc_data.get('max_len') or offer.get('max_length', 25000)
+        place = desc_data.get('promotion') or translate_offer_title(offer.get('publication_place', 'Strona główna'))
+        dur = desc_data.get('duration') or translate_offer_title(offer.get('offer_persistence_custom', '12 miesięcy'))
+        
+        img_txt = desc_data.get('images_content')
+        if not img_txt:
+            img_min = offer.get('images_limit_min', 0)
+            img_max = offer.get('images_limit_max', 5)
+            img_txt = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {img_min} do {img_max})."
+            
+        main_img = desc_data.get('main_image') or "Publikacja wymaga zdjęcia głównego"
+        
+        st.markdown(f"""
+        - Minimalna długość artykułu: **{min_len} znaków**
+        - Maksymalna długość artykułu: **{max_len} znaków**
+        - Promowanie: **{place}**
+        - Trwałość artykułu: **{dur}**
+        - Zdjęcie główne artykułu: **{main_img}**
+        - Liczba zdjęć w treści: **{img_txt}**
+        """)
+
+    with col3:
+        st.markdown("**Pozostałe wytyczne:**")
+        video = desc_data.get('video') or ("Tak" if offer.get('video_allowed') else "Nie")
+        scripts = desc_data.get('scripts') or ("Tak" if offer.get('scripts_allowed') else "Nie")
+        
+        st.markdown(f"""
+        - Możliwość zamieszczenia treści wideo: **{video}**
+        - Możliwość zamieszczenia zewnętrznych kodów zliczających: **{scripts}**
+        """)
+
+    st.markdown("---")
+    
+    # Action Bar if requested
+    if show_actions:
+        ac1, ac2 = st.columns([4, 1])
+        with ac1:
+            if offer.get('promo_discount'):
+                st.info(f"🏷️ Promocja: -{offer['promo_discount']}%")
+        with ac2:
+            if in_cart:
+                if st.button("Usuń", key=f"del_{u_id}", type="secondary"):
+                    return "REMOVE"
+            else:
+                if st.button("Wybierz", key=f"add_{u_id}", type="primary"):
+                    return "ADD"
+    return None
+
 
 # --- FILTER FORM ---
 def render_filters_form(options):

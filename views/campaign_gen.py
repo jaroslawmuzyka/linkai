@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils.common import render_filters_form, translate_offer_title
+from utils.common import render_filters_form, translate_offer_title, render_offer_details
 
 def render(supabase, wp_api):
     st.title("Generator Kampanii")
@@ -28,12 +28,10 @@ def render(supabase, wp_api):
         if filters_submit:
             with st.spinner("Przeszukiwanie bazy WhitePress..."):
                 portals = wp_api.search_portals(client['wp_project_id'], filters)
-                # Filter by name if needed
                 if filters.get('name_search'):
                     q = filters['name_search'].lower()
                     portals = [p for p in portals if q in p.get('name', '').lower() or q in p.get('portal_url', '').lower()]
                 
-                # Logic to pick candidates
                 candidates = []
                 for p in portals:
                     price = float(p.get('best_price', 0))
@@ -49,7 +47,6 @@ def render(supabase, wp_api):
                     })
                 candidates.sort(key=lambda x: x['score'], reverse=True)
                 
-                # Budget Limit
                 selected_items = []
                 current_spend = 0
                 for item in candidates:
@@ -80,47 +77,39 @@ def render(supabase, wp_api):
                 
                 # Cleaner Row
                 with st.expander(f"{idx+1}. {item['portal_url']} (DR: {item['metrics']['dr']})", expanded=(idx==0)):
-                    col_det, col_sel = st.columns([2, 1])
-                    
-                    with col_det:
-                        st.caption(f"Portal URL: {item['portal_url']}")
+                    col_det, col_sel = st.columns([1, 2]) # Adjusted ratio for better form view
                     
                     cache_key = f"gen_offers_{pid}"
                     if cache_key not in st.session_state:
                          st.session_state[cache_key] = wp_api.get_portal_offers(meta['wp_project_id'], pid)
                     offers = st.session_state[cache_key]
                     
+                    sel_o = None
                     if not offers:
                         sel_o = {"offer_title": "Standard", "best_price": item['price'], "offer_description": ""}
-                        with col_sel: st.write("Brak ofert.")
+                        st.write("Brak ofert.")
                     else:
-                        # Auto-match (simple logic)
                         offer_opts = {}
                         for o in offers:
-                            # Use TRANSLATED title for dropdown
                             label = f"{translate_offer_title(o['offer_title'])} ({o['best_price']} zł)"
                             offer_opts[label] = o
                         
-                        # Find closest match
                         def_key = next((k for k, v in offer_opts.items() if abs(float(v.get('best_price',0)) - item['price']) < 0.1), list(offer_opts.keys())[0])
                         
-                        with col_sel:
-                            sel_k = st.selectbox("Wybierz ofertę", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
-                            sel_o = offer_opts[sel_k]
-                            
-                        # REMOVED UGLY DESCRIPTION CAPTION
-                        # Instead, we can show key attributes if needed, or leave it clean.
-                        # User complained "Opis: Number of links..." looked ugly.
-                        # Better to show nothing than ugly text in this compacted view.
-                        # Or maybe just "Promocja: -X%" if exists.
-                        if sel_o.get('promo_discount'):
-                             st.success(f"Promocja: -{sel_o['promo_discount']}%")
+                        sel_k = st.selectbox("Wybierz ofertę", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
+                        sel_o = offer_opts[sel_k]
+                        
+                        # RENDER THE FULL DETAILS BLOCK HERE
+                        st.markdown("---")
+                        # Use our nice shared function to show details
+                        # u_id/in_cart not needed for display only
+                        render_offer_details(sel_o, u_id="dummy", in_cart=False, show_actions=False)
 
                 # Add to final list
                 final_item = item.copy()
-                final_item['price'] = float(sel_o.get('best_price', item['price']))
-                final_item['offer_title'] = sel_o.get('offer_title')
-                final_item['offer_description'] = sel_o.get('offer_description')
+                final_item['price'] = float(sel_o.get('best_price', item['price'])) if sel_o else item['price']
+                final_item['offer_title'] = sel_o.get('offer_title') if sel_o else ""
+                final_item['offer_description'] = sel_o.get('offer_description') if sel_o else ""
                 final_list.append(final_item)
                 running_cost += final_item['price']
 

@@ -1,101 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils.common import render_filters_form, translate_offer_title, format_offer_title_html, translate_bool, parse_offer_description
-
-def render_offer_details(offer, u_id, in_cart):
-    # Layout based on User Screenshot
-    
-    # 1. Title
-    st.markdown(f"#### {format_offer_title_html(offer['offer_title'])}")
-    
-    # Parsing description for fallback/primary data
-    desc_data = parse_offer_description(offer.get('offer_description', ''))
-    
-    # 2. Top Validations (Icons)
-    # Using parsed data or API keys
-    # Map parsed data to simple boolean logic if possible, or just display text?
-    # User wanted "Wymagane... : Icon"
-    # Usually these are specific flags in API, but if missing, hard to parse from text "Publication requires..." -> True
-    
-    req_src = offer.get('images_source_required', False)
-    trk_code = offer.get('tracking_code', True)
-    stats = offer.get('stats_from_publisher', True)
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.write(f"Wymagane podanie źródła zdjęć: {'✅' if req_src else '❌'}") 
-    with c2:
-        st.write(f"Kod śledzenia: {'✅' if trk_code else '❌'}")
-    with c3:
-        price_stats = offer.get('price_stats', 0)
-        st.write(f"Statystyki od wydawcy: {'✅' if stats else '❌'}  ({price_stats:.2f} zł netto)")
-
-    st.divider()
-    
-    # 3. Sections
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("**Wytyczne dot. linkowania:**")
-        # Prefer parsed description data over raw keys if available (since raw keys might be empty/generic)
-        limit = desc_data.get('links_limit') or offer.get('links_limit', '1')
-        other = desc_data.get('links_other') or ("nie zezwala" if not offer.get('links_other_allowed') else "zezwala")
-        
-        st.markdown(f"""
-        - Liczba linków do strony Reklamodawcy: **{limit}**
-        - Maksymalna liczba linków do stron innych niż domena Reklamodawcy: **{other}**
-        """)
-
-    with col2:
-        st.markdown("**Wytyczne dot. artykułu:**")
-        
-        min_len = desc_data.get('min_len') or offer.get('min_length', 1200)
-        max_len = desc_data.get('max_len') or offer.get('max_length', 25000)
-        place = desc_data.get('promotion') or translate_offer_title(offer.get('publication_place', 'Strona główna'))
-        dur = desc_data.get('duration') or translate_offer_title(offer.get('offer_persistence_custom', '12 miesięcy'))
-        
-        img_txt = desc_data.get('images_content')
-        if not img_txt:
-            img_min = offer.get('images_limit_min', 0)
-            img_max = offer.get('images_limit_max', 5)
-            img_txt = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {img_min} do {img_max})."
-            
-        main_img = desc_data.get('main_image') or "Publikacja wymaga zdjęcia głównego"
-        
-        st.markdown(f"""
-        - Minimalna długość artykułu: **{min_len} znaków**
-        - Maksymalna długość artykułu: **{max_len} znaków**
-        - Promowanie: **{place}**
-        - Trwałość artykułu: **{dur}**
-        - Zdjęcie główne artykułu: **{main_img}**
-        - Liczba zdjęć w treści: **{img_txt}**
-        """)
-
-    with col3:
-        st.markdown("**Pozostałe wytyczne:**")
-        video = desc_data.get('video') or ("Tak" if offer.get('video_allowed') else "Nie")
-        scripts = desc_data.get('scripts') or ("Tak" if offer.get('scripts_allowed') else "Nie")
-        
-        st.markdown(f"""
-        - Możliwość zamieszczenia treści wideo: **{video}**
-        - Możliwość zamieszczenia zewnętrznych kodów zliczających: **{scripts}**
-        """)
-
-    st.markdown("---")
-    
-    # Action Bar
-    ac1, ac2 = st.columns([4, 1])
-    with ac1:
-        if offer.get('promo_discount'):
-             st.info(f"🏷️ Promocja: -{offer['promo_discount']}%")
-    with ac2:
-        if in_cart:
-            if st.button("Usuń", key=f"del_{u_id}", type="secondary"):
-                return "REMOVE"
-        else:
-            if st.button("Wybierz", key=f"add_{u_id}", type="primary"):
-                return "ADD"
-    return None
+from utils.common import render_filters_form, render_offer_details
 
 def render(supabase, wp_api):
     st.title("Przeglądarka Portali")
@@ -111,7 +16,6 @@ def render(supabase, wp_api):
         
         with st.form("browse_form"):
             filters = render_filters_form(opts)
-            # Add state to prevent rerun loop if needed, but form submit handles it
             if st.form_submit_button("Załaduj Portale"):
                 with st.spinner("Pobieram dane..."):
                     res = wp_api.search_portals(client['wp_project_id'], filters, fetch_all=True)
@@ -175,7 +79,7 @@ def render(supabase, wp_api):
                             in_cart = u_id in [x['unique_id'] for x in st.session_state['cart_items']]
                             
                             with st.container(border=True):
-                                action = render_offer_details(offer, u_id, in_cart)
+                                action = render_offer_details(offer, u_id, in_cart, show_actions=True)
                                 if action == "ADD":
                                     st.session_state['cart_items'].append({
                                         "unique_id": u_id, "portal_id": pid, "portal_url": r.get('portal_url'),

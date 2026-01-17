@@ -1,77 +1,17 @@
 import streamlit as st
 import pandas as pd
-from utils.common import render_filters_form
-
-# --- HELPER: TRANSLATION & FORMATTING ---
-def translate_offer_title(title):
-    """Kompleksowe tłumaczenie nazwy oferty na polski"""
-    replacements = {
-        # Basics
-        "Home page": "Strona główna",
-        "Subpage": "Podstrona",
-        "News": "News/Aktualności",
-        "Article": "Artykuł",
-        
-        # Duration
-        "1 day": "1 dzień",
-        "12 months": "12 miesięcy",
-        "Permanent": "Bezterminowo",
-        "days": "dni",
-        "months": "miesięcy",
-        "month": "miesiąc",
-        
-        # Links
-        "1 link": "1 link",
-        "2 links": "2 linki",
-        "3 links": "3 linki",
-        "4 links": "4 linki",
-        "links": "linki",
-        "NOFOLLOW": "NOFOLLOW",
-        "DOFOLLOW": "DOFOLLOW",
-        
-        # Types
-        "All link types": "Wszystkie rodzaje linków",
-        "Standard link": "Link standardowy",
-        "Brand links": "Linki brandowe",
-        "Generic links": "Linki generyczne",
-        "Naked links": "Linki URL",
-        "Graphic links": "Linki graficzne",
-        "Mixed links": "Linki mieszane",
-        "Exact Match Link": "EML - Exact Match Link",
-        "Match Link": "Match Link"
-    }
-    
-    # Apply replacements (sorted by length to avoid partial matches first)
-    sorted_keys = sorted(replacements.keys(), key=len, reverse=True)
-    for k in sorted_keys:
-        # Case insensitive replace might be safer, but for now simple replace
-        title = title.replace(k, replacements[k])
-        
-    # Formatting: Red and Bold
-    return f":red[**{title}**]"
-
-def translate_bool(val):
-    return "Tak" if val else "Nie"
+from utils.common import render_filters_form, translate_offer_title, format_offer_title_html, translate_bool
 
 def render_offer_details(offer, u_id, in_cart):
     # Layout based on User Screenshot
     
     # 1. Title
-    st.markdown(f"#### {translate_offer_title(offer['offer_title'])}")
+    st.markdown(f"#### {format_offer_title_html(offer['offer_title'])}")
     
     # 2. Top Validations (Icons)
-    # Check data keys. If specific keys missing, default to safe values.
-    # Wymagane podanie źródła zdjęć (images_source_required?)
     req_src = offer.get('images_source_required', False)
-    trk_code = offer.get('tracking_code', True) # Default to true usually
+    trk_code = offer.get('tracking_code', True)
     stats = offer.get('stats_from_publisher', True)
-    
-    # Icons logic: Red X if required? Or Green Check if OK?
-    # Screenshot: "Wymagane podanie źródła zdjęć: X (RED)" -> means NOT required? OR means Bad?
-    # Usually "Not Required" is good for advertiser.
-    # Let's assume text: "Wymagane podanie źródła zdjęć:" and Icon shows status.
-    # If req_src is FALSE -> "Nie" -> Green Check?
-    # Screenshot shows: "Wymagane... : X" (Red Icon). This usually means "No".
     
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -85,12 +25,10 @@ def render_offer_details(offer, u_id, in_cart):
     st.divider()
     
     # 3. Sections
-    # Columns: Linkowanie | Artykuł | Pozostałe
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("**Wytyczne dot. linkowania:**")
-        # List items
         limit = offer.get('links_limit', 'Brak danych')
         other = "nie zezwala" if not offer.get('links_other_allowed') else "zezwala"
         
@@ -104,11 +42,9 @@ def render_offer_details(offer, u_id, in_cart):
         
         min_len = offer.get('min_length', 1200)
         max_len = offer.get('max_length', 25000)
-        place = offer.get('publication_place', 'Strona główna').replace("Home page", "Strona główna")
-        dur_api = offer.get('offer_persistence_custom', '12 miesięcy')
-        dur = translate_offer_title(dur_api).replace("**", "").replace(":red[", "").replace("]", "") # Strip formatting for plain text
+        place = translate_offer_title(offer.get('publication_place', 'Strona główna'))
+        dur = translate_offer_title(offer.get('offer_persistence_custom', '12 miesięcy'))
         
-        # Images
         img_min = offer.get('images_limit_min', 0)
         img_max = offer.get('images_limit_max', 5)
         img_txt = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {img_min} do {img_max})."
@@ -141,7 +77,7 @@ def render_offer_details(offer, u_id, in_cart):
              st.info(f"🏷️ Promocja: -{offer['promo_discount']}%")
     with ac2:
         if in_cart:
-            if st.button("Usuń z koszyka", key=f"del_{u_id}", type="secondary"):
+            if st.button("Usuń", key=f"del_{u_id}", type="secondary"):
                 return "REMOVE"
         else:
             if st.button("Wybierz", key=f"add_{u_id}", type="primary"):
@@ -162,6 +98,7 @@ def render(supabase, wp_api):
         
         with st.form("browse_form"):
             filters = render_filters_form(opts)
+            # Add state to prevent rerun loop if needed, but form submit handles it
             if st.form_submit_button("Załaduj Portale"):
                 with st.spinner("Pobieram dane..."):
                     res = wp_api.search_portals(client['wp_project_id'], filters, fetch_all=True)
@@ -248,7 +185,6 @@ def render(supabase, wp_api):
                     with st.form("final_camp_create"):
                         cname = st.text_input("Nazwa Kampanii", f"Manualna - {client_name}")
                         if st.form_submit_button("Utwórz Kampanię"):
-                            # Save to DB logic
                             camp = supabase.table("campaigns").insert({
                                 "client_id": client['id'], "name": cname, 
                                 "budget_limit": sum(x['price'] for x in st.session_state['cart_items']), 

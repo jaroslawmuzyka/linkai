@@ -1,5 +1,64 @@
 import streamlit as st
 
+# --- TRANSLATIONS HELPERS ---
+def translate_offer_title(title):
+    """Kompleksowe tłumaczenie nazwy oferty na polski"""
+    if not title: return "-"
+    
+    replacements = {
+        # Basics
+        "Home page": "Strona główna",
+        "Subpage": "Podstrona",
+        "News": "News/Aktualności",
+        "Article": "Artykuł",
+        
+        # Duration
+        "1 day": "1 dzień",
+        "12 months": "12 miesięcy",
+        "Permanent": "Bezterminowo",
+        "days": "dni",
+        "months": "miesięcy",
+        "month": "miesiąc",
+        
+        # Links
+        "1 link": "1 link",
+        "2 links": "2 linki",
+        "3 links": "3 linki",
+        "4 links": "4 linki",
+        "links": "linki",
+        "NOFOLLOW": "NOFOLLOW",
+        "DOFOLLOW": "DOFOLLOW",
+        
+        # Types
+        "All link types": "Wszystkie rodzaje linków",
+        "Standard link": "Link standardowy",
+        "Brand links": "Linki brandowe",
+        "Generic links": "Linki generyczne",
+        "Naked links": "Linki URL",
+        "Graphic links": "Linki graficzne",
+        "Mixed links": "Linki mieszane",
+        "Exact Match Link": "EML - Exact Match Link",
+        "Match Link": "Match Link"
+    }
+    
+    # Apply replacements (sorted by length to avoid partial matches first)
+    sorted_keys = sorted(replacements.keys(), key=len, reverse=True)
+    for k in sorted_keys:
+        # Case insensitive replace might be safer, but for now simple replace
+        title = title.replace(k, replacements[k])
+        
+    return title
+
+def format_offer_title_html(title):
+    """Returns formatted :red[**Title**] string for Streamlit markdown"""
+    translated = translate_offer_title(title)
+    return f":red[**{translated}**]"
+
+def translate_bool(val):
+    return "Tak" if val else "Nie"
+
+
+# --- FILTER FORM ---
 def render_filters_form(options):
     """
     Renderuje rozbudowany formularz filtrów (Podstawowe, Marketingowe, SEO).
@@ -8,11 +67,6 @@ def render_filters_form(options):
     def get_opts(key):
         o = options.get(key, {})
         return list(o.keys()) if isinstance(o, dict) else []
-
-    # Helper for formatting labels from the options dict
-    def fmt_opts(key, val):
-        o = options.get(key, {})
-        return o.get(val, val)
 
     filters = {}
     

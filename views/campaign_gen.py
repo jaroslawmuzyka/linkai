@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils.common import render_filters_form
+from utils.common import render_filters_form, translate_offer_title
 
 def render(supabase, wp_api):
     st.title("Generator Kampanii")
@@ -70,40 +70,51 @@ def render(supabase, wp_api):
             
             st.divider()
             st.subheader("🛍️ Dostosuj Ofertę")
+            st.info("System automatycznie dobrał najtańszą ofertę. Możesz ją zmienić poniżej.")
             
             final_list = []
             running_cost = 0
             
-            # Show list in a row layout cleaner than before
             for idx, item in enumerate(candidates):
                 pid = item['wp_portal_id']
                 
-                with st.expander(f"{idx+1}. {item['portal_url']} (DR: {item['metrics']['dr']}) - Est. {item['price']} PLN", expanded=False):
+                # Cleaner Row
+                with st.expander(f"{idx+1}. {item['portal_url']} (DR: {item['metrics']['dr']})", expanded=(idx==0)):
+                    col_det, col_sel = st.columns([2, 1])
+                    
+                    with col_det:
+                        st.caption(f"Portal URL: {item['portal_url']}")
+                    
                     cache_key = f"gen_offers_{pid}"
                     if cache_key not in st.session_state:
                          st.session_state[cache_key] = wp_api.get_portal_offers(meta['wp_project_id'], pid)
                     offers = st.session_state[cache_key]
                     
                     if not offers:
-                        st.write("Brak ofert. Używam ceny domyślnej.")
                         sel_o = {"offer_title": "Standard", "best_price": item['price'], "offer_description": ""}
+                        with col_sel: st.write("Brak ofert.")
                     else:
-                        # Auto-match
-                        offer_opts = {f"{o['offer_title']} ({o['best_price']} zł)": o for o in offers}
+                        # Auto-match (simple logic)
+                        offer_opts = {}
+                        for o in offers:
+                            # Use TRANSLATED title for dropdown
+                            label = f"{translate_offer_title(o['offer_title'])} ({o['best_price']} zł)"
+                            offer_opts[label] = o
+                        
+                        # Find closest match
                         def_key = next((k for k, v in offer_opts.items() if abs(float(v.get('best_price',0)) - item['price']) < 0.1), list(offer_opts.keys())[0])
                         
-                        sel_k = st.selectbox("Oferta:", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
-                        sel_o = offer_opts[sel_k]
-                        
-                        # Info
-                        c1, c2 = st.columns(2)
-                        with c1: st.info(f"Typ: {sel_o.get('offer_allowed_link_types', '-')}")
-                        with c2: st.caption(sel_o.get('offer_description', ''))
-                
+                        with col_sel:
+                            sel_k = st.selectbox("Wybierz ofertę", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
+                            sel_o = offer_opts[sel_k]
+                            
+                        # Show small details
+                        st.caption(f"Opis: {sel_o.get('offer_description', '')[:200]}...")
+
                 # Add to final list
                 final_item = item.copy()
                 final_item['price'] = float(sel_o.get('best_price', item['price']))
-                final_item['offer_title'] = sel_o.get('offer_title')
+                final_item['offer_title'] = sel_o.get('offer_title') # Keep original English in DB? Or Translated? User might prefer English in DB for data consistency context, but display Polish. Let's keep original for now and translate on view.
                 final_item['offer_description'] = sel_o.get('offer_description')
                 final_list.append(final_item)
                 running_cost += final_item['price']

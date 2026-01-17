@@ -151,84 +151,90 @@ def render_offer_row(offer, u_id, in_cart=False, show_actions=True):
     # 1. Nazwa Oferty
     with cols[0]:
         st.markdown(format_offer_title_html(offer['offer_title']))
-        # Add basic visual tags if needed
-        # st.caption("Tematyka wrażliwa: ...") if data exists
+        if offer.get('offer_url'):
+            st.caption(f"URL: {offer['offer_url']}")
         
     # 2. Opis Oferty (Wide)
     with cols[1]:
         # Top Icons Line
-        req_src = offer.get('images_source_required', False)
-        trk_code = offer.get('tracking_code', True)
-        stats = offer.get('stats_from_publisher', True)
+        # Swagger: offer_require_photo_source, portal_tracking (not in offer usually, but let's check keys)
+        req_src = offer.get('offer_require_photo_source', False)
+        # Tracking often property of Portal, not Offer, but sometimes passed down. 
+        # If not present, don't show "Check" blindly.
+        trk_code = offer.get('portal_tracking') # Boolean or None
         
         line1 = []
-        line1.append(f"Zdjęcia {'❌' if not req_src else '✅'}") # Inverted logic in screenshot usually? Screenshot says "Wymagane podanie źródła: X" -> False
-        line1.append(f"Kod: {'✅' if trk_code else '❌'}")
-        p_stats = offer.get('price_stats', 0)
-        line1.append(f"Statystyki: {'✅' if stats else '❌'} ({p_stats} zł)")
-        st.caption(" | ".join(line1))
+        line1.append(f"Wymaga źródła: {'✅' if req_src else '❌'}")
+        if trk_code is not None:
+             line1.append(f"Tracking: {'✅' if trk_code else '❌'}")
+        
+        # Stats cost? NOT in Swagger. Remove 0 zl if not found.
+        if 'price_stats' in offer:
+             line1.append(f"Statystyki: {offer['price_stats']} zł")
+
+        if line1: st.caption(" | ".join(line1))
         
         # Link Guidelines
-        limit = d.get('links_limit') or offer.get('links_limit', '1')
-        other = d.get('links_other') or "nie zezwala"
-        st.markdown(f"**Linki:** do Reklamodawcy: {limit}, Inne: {other}")
+        limit = d.get('links_limit') or offer.get('offer_links_limit', '1') # Swagger doesn't specify limit field, relies on desc
+        other = d.get('links_other') or "wg opisu"
         
         # Article Guidelines
-        # Compact them to save vertical space? Or bullets? Screenshot shows bullets.
         min_l = d.get('min_len', '1200')
-        max_l = d.get('max_len', '25000')
-        dur = d.get('duration', '12 mies.')
-        img_m = d.get('main_image', 'Tak')
+        max_l = d.get('max_len', '20000')
+        dur = d.get('duration', str(offer.get('offer_persistence_custom', offer.get('offer_persistence', '12 m.'))))
         
-        st.markdown(f"""
-        - Długość: {min_l}-{max_l} znaków
-        - Trwałość: {dur}
-        - Zdjęcie gł.: {img_m}
-        """)
+        st.markdown(f"**Linki:** Limit: {limit} | Inne: {other}")
+        st.caption(f"Długość: {min_l}-{max_l} | Trwałość: {dur}")
+
+        with st.expander("Pełny opis oferty", expanded=False):
+            st.write(offer.get('offer_description', 'Brak opisu.'))
+            if 'offer_allowed_link_types' in offer:
+                st.write(f"**Typy linków**: {offer['offer_allowed_link_types']}")
 
     # 3. Cena Netto
     with cols[2]:
         price = float(offer.get('best_price', 0))
         st.markdown(f"**{price:.2f} zł**")
         if offer.get('promo_discount'):
-             st.caption(f"Promocja -{offer['promo_discount']}%")
+             st.caption(f"-{offer['promo_discount']}%")
 
     # 4. Długość promocji (dni)
     with cols[3]:
-        # Often mapped to publishing time or specific promo field
-        days = offer.get('publication_time', '3') # Default
-        st.write(f"{days} dni") 
+        prom = offer.get('offer_promoting', 0)
+        st.write(f"{prom} dni") 
 
     # 5. Napisanie artykułu
     with cols[4]:
-        # Check if copywriting included or allowed
-        # Placeholder based on standard API
-        can_write = offer.get('copywriting_available', False) 
-        st.write("✅" if can_write else "❌")
+        # Swagger doesn't have explicit copywriting allowed bool in offer?
+        # Maybe 'content_writing' status? Assuming False if missing to avoid misleading.
+        st.write("-")
 
     # 6. Oznaczanie
     with cols[5]:
-        mark = offer.get('article_marking', 'Sponsorowany')
-        st.write(mark if mark else "-")
+        # Not in Swagger explicitly as simple field? 'article_marking'? 
+        # Checking implementation plan/swagger again.
+        # Swagger: offer_tagging from options?
+        mark = offer.get('offer_tagging', '-')
+        st.write(mark)
 
     # 7. Linki Dofollow
     with cols[6]:
-        dof = offer.get('links_dofollow', True) 
+        # Swagger: offer_dofollow is boolean
+        dof = offer.get('offer_dofollow')
+        if dof is None: dof = False
+        # If it's 1/0 int
+        if isinstance(dof, int): dof = (dof == 1)
         st.write("✅" if dof else "❌")
-        # List types if space?
-        # st.caption("Brand, URL")
 
     # 8. Gwarancja ruchu
     with cols[7]:
-        traf = offer.get('traffic_guarantee', False)
-        st.write("✅" if traf else "❌")
+        # Not in Swagger offer response?
+        st.write("-")
 
     # 9. Wskaźnik trwałości
     with cols[8]:
-        # 'price_reliability' or similar in API? 
-        # Or just use placeholder score from screenshot "27/27"
-        sc = offer.get('reliability_score', '10/10')
-        st.write(f"{sc}")
+        pers = offer.get('offer_persistence')
+        st.write(f"{pers} m." if pers else "-")
 
     # 10. Button
     with cols[9]:

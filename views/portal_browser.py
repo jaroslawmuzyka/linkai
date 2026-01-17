@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils.common import render_filters_form, translate_offer_title, format_offer_title_html, translate_bool
+from utils.common import render_filters_form, translate_offer_title, format_offer_title_html, translate_bool, parse_offer_description
 
 def render_offer_details(offer, u_id, in_cart):
     # Layout based on User Screenshot
@@ -8,7 +8,15 @@ def render_offer_details(offer, u_id, in_cart):
     # 1. Title
     st.markdown(f"#### {format_offer_title_html(offer['offer_title'])}")
     
+    # Parsing description for fallback/primary data
+    desc_data = parse_offer_description(offer.get('offer_description', ''))
+    
     # 2. Top Validations (Icons)
+    # Using parsed data or API keys
+    # Map parsed data to simple boolean logic if possible, or just display text?
+    # User wanted "Wymagane... : Icon"
+    # Usually these are specific flags in API, but if missing, hard to parse from text "Publication requires..." -> True
+    
     req_src = offer.get('images_source_required', False)
     trk_code = offer.get('tracking_code', True)
     stats = offer.get('stats_from_publisher', True)
@@ -29,8 +37,9 @@ def render_offer_details(offer, u_id, in_cart):
     
     with col1:
         st.markdown("**Wytyczne dot. linkowania:**")
-        limit = offer.get('links_limit', 'Brak danych')
-        other = "nie zezwala" if not offer.get('links_other_allowed') else "zezwala"
+        # Prefer parsed description data over raw keys if available (since raw keys might be empty/generic)
+        limit = desc_data.get('links_limit') or offer.get('links_limit', '1')
+        other = desc_data.get('links_other') or ("nie zezwala" if not offer.get('links_other_allowed') else "zezwala")
         
         st.markdown(f"""
         - Liczba linków do strony Reklamodawcy: **{limit}**
@@ -40,28 +49,32 @@ def render_offer_details(offer, u_id, in_cart):
     with col2:
         st.markdown("**Wytyczne dot. artykułu:**")
         
-        min_len = offer.get('min_length', 1200)
-        max_len = offer.get('max_length', 25000)
-        place = translate_offer_title(offer.get('publication_place', 'Strona główna'))
-        dur = translate_offer_title(offer.get('offer_persistence_custom', '12 miesięcy'))
+        min_len = desc_data.get('min_len') or offer.get('min_length', 1200)
+        max_len = desc_data.get('max_len') or offer.get('max_length', 25000)
+        place = desc_data.get('promotion') or translate_offer_title(offer.get('publication_place', 'Strona główna'))
+        dur = desc_data.get('duration') or translate_offer_title(offer.get('offer_persistence_custom', '12 miesięcy'))
         
-        img_min = offer.get('images_limit_min', 0)
-        img_max = offer.get('images_limit_max', 5)
-        img_txt = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {img_min} do {img_max})."
+        img_txt = desc_data.get('images_content')
+        if not img_txt:
+            img_min = offer.get('images_limit_min', 0)
+            img_max = offer.get('images_limit_max', 5)
+            img_txt = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {img_min} do {img_max})."
+            
+        main_img = desc_data.get('main_image') or "Publikacja wymaga zdjęcia głównego"
         
         st.markdown(f"""
         - Minimalna długość artykułu: **{min_len} znaków**
         - Maksymalna długość artykułu: **{max_len} znaków**
         - Promowanie: **{place}**
         - Trwałość artykułu: **{dur}**
-        - Zdjęcie główne artykułu: **Publikacja wymaga zdjęcia głównego**
+        - Zdjęcie główne artykułu: **{main_img}**
         - Liczba zdjęć w treści: **{img_txt}**
         """)
 
     with col3:
         st.markdown("**Pozostałe wytyczne:**")
-        video = "Tak" if offer.get('video_allowed') else "Nie"
-        scripts = "Tak" if offer.get('scripts_allowed') else "Nie"
+        video = desc_data.get('video') or ("Tak" if offer.get('video_allowed') else "Nie")
+        scripts = desc_data.get('scripts') or ("Tak" if offer.get('scripts_allowed') else "Nie")
         
         st.markdown(f"""
         - Możliwość zamieszczenia treści wideo: **{video}**

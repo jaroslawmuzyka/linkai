@@ -108,13 +108,18 @@ def render(supabase, wp_api):
                             sel_k = st.selectbox("Wybierz ofertę", list(offer_opts.keys()), index=list(offer_opts.keys()).index(def_key), key=f"gen_sel_{pid}")
                             sel_o = offer_opts[sel_k]
                             
-                        # Show small details
-                        st.caption(f"Opis: {sel_o.get('offer_description', '')[:200]}...")
+                        # REMOVED UGLY DESCRIPTION CAPTION
+                        # Instead, we can show key attributes if needed, or leave it clean.
+                        # User complained "Opis: Number of links..." looked ugly.
+                        # Better to show nothing than ugly text in this compacted view.
+                        # Or maybe just "Promocja: -X%" if exists.
+                        if sel_o.get('promo_discount'):
+                             st.success(f"Promocja: -{sel_o['promo_discount']}%")
 
                 # Add to final list
                 final_item = item.copy()
                 final_item['price'] = float(sel_o.get('best_price', item['price']))
-                final_item['offer_title'] = sel_o.get('offer_title') # Keep original English in DB? Or Translated? User might prefer English in DB for data consistency context, but display Polish. Let's keep original for now and translate on view.
+                final_item['offer_title'] = sel_o.get('offer_title')
                 final_item['offer_description'] = sel_o.get('offer_description')
                 final_list.append(final_item)
                 running_cost += final_item['price']

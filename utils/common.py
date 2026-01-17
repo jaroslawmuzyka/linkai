@@ -1,4 +1,5 @@
 import streamlit as st
+import re
 
 # --- TRANSLATIONS HELPERS ---
 def translate_offer_title(title):
@@ -55,8 +56,89 @@ def format_offer_title_html(title):
     return f":red[**{translated}**]"
 
 def translate_bool(val):
-    return "Tak" if val else "Nie"
+    if isinstance(val, bool):
+        return "Tak" if val else "Nie"
+    if str(val).lower() in ["yes", "true", "1"]: return "Tak"
+    if str(val).lower() in ["no", "false", "0"]: return "Nie"
+    return str(val)
 
+
+def parse_offer_description(desc):
+    """
+    Parses the long English description string into a dictionary of known keys.
+    Returns a dict with Polish keys ready for display.
+    """
+    if not desc: return {}
+    
+    # Define markers to split or regex extract
+    # Map English phrase -> Polish Key
+    
+    data = {}
+    
+    # Helper regex extraction
+    def extract_val(pattern, text):
+        m = re.search(pattern, text, re.IGNORECASE)
+        return m.group(1).strip() if m else None
+
+    # Mapping based on user provided text
+    # "Number of links to the Advertiser's website: 1"
+    val = extract_val(r"Number of links to the Advertiser's website:\s*(.*?)(?=\s+Maximum|Minimum|$)", desc)
+    if val: data['links_limit'] = val
+    
+    # "Maximum number of links to pages other than the Advertiser's domain: does not allow"
+    val = extract_val(r"Maximum number of links to pages other than the Advertiser's domain:\s*(.*?)(?=\s+Minimum|Maximum|$)", desc)
+    if val: data['links_other'] = "nie zezwala" if "does not allow" in val.lower() else val
+    
+    # "Minimum length of the article (characters with spaces): 1200"
+    val = extract_val(r"Minimum length of the article.*?:(\d+)\s*characters", desc) # Simplified regex
+    if not val: val = extract_val(r"Minimum length of the article.*?:(\d+)", desc)
+    if val: data['min_len'] = val
+    
+    # "Maximum length of the article (characters with spaces): 25000"
+    val = extract_val(r"Maximum length of the article.*?:(\d+)", desc)
+    if val: data['max_len'] = val
+    
+    # "Promoting: Home page"
+    val = extract_val(r"Promoting:\s*(.*?)(?=\s+Duration|Trwałość|$)", desc)
+    if val: data['promotion'] = translate_offer_title(val)
+    
+    # "Duration of articles... : The article is deleted after 12 months"
+    # User example: "Artykuł jest kasowany po 12 miesiącach"
+    val = extract_val(r"Duration of articles.*?:(.*?)(?=\s+Main image|$)", desc)
+    if val:
+        if "deleted after 12 months" in val: data['duration'] = "Artykuł jest kasowany po 12 miesiącach."
+        elif "after 12 months" in val: data['duration'] = "12 miesięcy"
+        elif "Permanent" in val or "lifetime" in val: data['duration'] = "Bezterminowo"
+        else: data['duration'] = translate_offer_title(val)
+
+    # "Main image of the article: Publication requires a main photo..."
+    val = extract_val(r"Main image of the article:\s*(.*?)(?=\s+Number of images|$)", desc)
+    if val:
+        if "requires a main photo" in val: data['main_image'] = "Publikacja wymaga zdjęcia głównego"
+        else: data['main_image'] = translate_offer_title(val)
+
+    # "Number of images in content: The article does not have to, but can have images (from 1 to 5)."
+    val = extract_val(r"Number of images in content:\s*(.*?)(?=\s+Possibility|$)", desc)
+    if val:
+        # Translate complex string
+        if "does not have to, but can have images" in val:
+            nums = re.search(r"\(from (\d+) to (\d+)\)", val)
+            if nums:
+                data['images_content'] = f"Artykuł w treści nie musi, ale może mieć zdjęcia (od {nums.group(1)} do {nums.group(2)})."
+            else:
+                data['images_content'] = "Możliwość dodania zdjęć."
+        else:
+            data['images_content'] = val
+
+    # "Possibility of posting video content: No"
+    val = extract_val(r"Possibility of posting video content:\s*(.*?)(?=\s+Possibility|$)", desc)
+    if val: data['video'] = translate_bool(val)
+
+    # "Possibility of placing external counting...: No"
+    val = extract_val(r"Possibility of placing external counting.*?:(.*?)$", desc)
+    if val: data['scripts'] = translate_bool(val)
+    
+    return data
 
 # --- FILTER FORM ---
 def render_filters_form(options):

@@ -17,127 +17,182 @@ def render(supabase, wp_api):
             
             with st.form("browse_form"):
                 filters = render_filters_form(opts)
-                if st.form_submit_button("Załaduj"):
-                    res = wp_api.search_portals(client['wp_project_id'], filters, fetch_all=True)
-                    if filters.get('name_search'):
-                        query = filters['name_search'].lower()
-                        res = [r for r in res if query in r.get('name','').lower() or query in r.get('portal_url','').lower()]
-                    
-                    st.session_state['browse_res'] = res
+                if st.form_submit_button("Załaduj Portale"):
+                    with st.spinner("Pobieram dane..."):
+                        res = wp_api.search_portals(client['wp_project_id'], filters, fetch_all=True)
+                        
+                        # Client-side filtering for things not in API
+                        if filters.get('name_search'):
+                            query = filters['name_search'].lower()
+                            res = [r for r in res if query in r.get('name','').lower() or query in r.get('portal_url','').lower()]
+                        
+                        st.session_state['browse_res'] = res
             
+            # --- WIDOK LISTY (ROW LAYOUT) ---
             if 'browse_res' in st.session_state:
                 res = st.session_state['browse_res']
-                st.write(f"Wyników: {len(res)}")
+                st.markdown(f"**Znaleziono**: {len(res)} portali")
+                
+                # Setup session state for expanded rows if not exists
+                if 'expanded_offers' not in st.session_state:
+                    st.session_state['expanded_offers'] = set()
+                
+                # Header Row
+                h1, h2, h3, h4, h5, h6, h7 = st.columns([2.5, 1, 1, 1, 1, 1, 1.5]) 
+                h1.caption("Portal")
+                h2.caption("Ruch (UU)")
+                h3.caption("Trust Flow")
+                h4.caption("Domain Rating")
+                h5.caption("Dofollow")
+                h6.caption("Cena od")
+                h7.caption("Akcja")
+                st.divider()
+                
+                # Initialize cart for manual campaign creation (if not exists)
+                if 'cart_items' not in st.session_state:
+                    st.session_state['cart_items'] = []
 
-                df_disp = []
-                for r in res:
-                    df_disp.append({
-                        "Wybierz": False, "Nazwa": r['name'], "URL": r['portal_url'],
-                        "Cena (od)": float(r.get('best_price',0)), "DR": r.get('portal_score_domain_rating'),
-                        "id": r['id'], 
-                        "_raw": r
-                    })
+                # Pagination (Logic simplified: show first 50 or allow paging? Streamlit slow with many widgets)
+                # Let's show all for now, but assume user knows limits.
                 
-                edited = st.data_editor(
-                    pd.DataFrame(df_disp), 
-                    column_config={
-                        "Wybierz": st.column_config.CheckboxColumn(required=True), 
-                        "_raw": None,
-                        "id": None 
-                    }, 
-                    hide_index=True
-                )
-                
-                sel_rows = edited[edited["Wybierz"]==True]
-                
-                if not sel_rows.empty:
-                    st.divider()
-                    st.subheader("🛍️ Wybierz Ofertę dla zaznaczonych portali")
+                for idx, r in enumerate(res):
+                    pid = r['id']
                     
-                    selected_offers = {}
-                    
-                    for index, row in sel_rows.iterrows():
-                        r = row['_raw']
-                        p_id = r['id']
-                        p_name = r['name']
+                    # Row Layout
+                    with st.container():
+                        c1, c2, c3, c4, c5, c6, c7 = st.columns([2.5, 1, 1, 1, 1, 1, 1.5])
                         
-                        with st.expander(f"Oferty dla: {p_name} ({r['portal_url']})", expanded=True):
-                            # Fetch offers
-                            offers = wp_api.get_portal_offers(client['wp_project_id'], p_id)
-                            
-                            if not offers:
-                                st.warning("Brak dostępnych ofert.")
-                                continue
+                        # C1: Portal Info (Name hidden per request? user said "remove portal_name because useless", but implies Domain is key)
+                        # Display Domain prominently.
+                        with c1:
+                            st.subheader(r.get('portal_url', ''))
+                            # Tag badges
+                            ctags = []
+                            if r.get('portal_score_quality'): ctags.append(f"Jakość: {r.get('portal_score_quality')}/10")
+                            if r.get('portal_country'): ctags.append(r.get('portal_country'))
+                            if ctags: st.caption(" | ".join(ctags))
 
-                            # Enhanced Display Options
-                            offer_opts = {}
-                            for o in offers:
-                                # Build a clear label
-                                promo_text = f" [PROMO {o['promo_discount']}%]" if o.get('promo_discount') else ""
-                                dofollow = "Dofollow" if o.get('offer_dofollow') else "Nofollow"
-                                label = f"{o['offer_title']} | {o['best_price']} PLN | {dofollow}{promo_text}"
-                                offer_opts[label] = o
+                        with c2: st.write(f"{r.get('portal_unique_users', 0):,}")
+                        with c3: st.write(f"{r.get('portal_score_trust_flow', '-')}")
+                        with c4: st.write(f"{r.get('portal_score_domain_rating', '-')}")
+                        
+                        # Dofollow Icon
+                        with c5:
+                            # Usually dofollow is offer specific, but portal might have general flag
+                            st.write("✅" if r.get('offers_dofollow_count', 0) > 0 else "❌")
+                        
+                        with c6: st.write(f"**{r.get('best_price', 0):.2f} zł**")
+                        
+                        # Action Button
+                        with c7:
+                            # Toggle button for offers
+                            is_expanded = pid in st.session_state['expanded_offers']
+                            btn_label = "Ukryj oferty" if is_expanded else "Zobacz oferty"
+                            if st.button(btn_label, key=f"btn_exp_{pid}"):
+                                if is_expanded:
+                                    st.session_state['expanded_offers'].discard(pid)
+                                else:
+                                    st.session_state['expanded_offers'].add(pid)
+                                st.rerun()
 
+                    # --- EXPANDED OFFERS SECTION ---
+                    if pid in st.session_state['expanded_offers']:
+                        with st.container():
+                            st.info(f"Oferty dla {r.get('portal_url')}")
+                            # Fetch offers logic (cached)
+                            cache_key = f"offers_data_{pid}"
+                            if cache_key not in st.session_state:
+                                st.session_state[cache_key] = wp_api.get_portal_offers(client['wp_project_id'], pid)
                             
-                            # Default to checking if there is a 'best_price' match or just first
-                            default_idx = 0
+                            my_offers = st.session_state[cache_key]
                             
-                            picked_label = st.selectbox(f"Wybierz ofertę dla {r['portal_url']}", list(offer_opts.keys()), key=f"off_{p_id}")
-                            
-                            if picked_label:
-                                o = offer_opts[picked_label]
-                                selected_offers[p_id] = o
+                            if not my_offers:
+                                st.warning("Brak ofert.")
+                            else:
+                                # Render Table-like layout for offers
+                                # Cols: Name/Desc | Price | Duration | Dofollow | Action
+                                oh1, oh2, oh3, oh4, oh5 = st.columns([4, 1, 1, 1, 1])
+                                oh1.caption("Nazwa / Opis")
+                                oh2.caption("Cena")
+                                oh3.caption("Trwałość")
+                                oh4.caption("Link")
+                                oh5.caption("Wybór")
                                 
-                                # Show details
-                                c1, c2 = st.columns(2)
-                                c1.caption(f"Opis: {o.get('offer_description', '-')}")
-                                c2.caption(f"Trwałość: {o.get('offer_persistence_custom') or o.get('offer_persistence')} | Linki: {o.get('offer_allowed_link_types')}")
+                                for offer in my_offers:
+                                    with st.container():
+                                        oc1, oc2, oc3, oc4, oc5 = st.columns([4, 1, 1, 1, 1])
+                                        with oc1:
+                                            st.write(f"**{offer['offer_title']}**")
+                                            desc_parts = []
+                                            if offer.get('promo_discount'): desc_parts.append(f"PROMO -{offer['promo_discount']}%")
+                                            if offer.get('offer_description'): desc_parts.append(offer['offer_description'][:100] + "...")
+                                            st.caption(" | ".join(desc_parts))
+                                        
+                                        with oc2: st.write(f"{offer['best_price']} zł")
+                                        with oc3: st.write(f"{offer.get('offer_persistence_custom', '-')}")
+                                        with oc4: st.write("Dofollow" if offer.get('offer_dofollow') else "Nofollow")
+                                        
+                                        with oc5:
+                                            # Check if in cart
+                                            cart_ids = [x['unique_id'] for x in st.session_state['cart_items']]
+                                            # Unique ID for cart item = pid + offer_id (if offer has ID) or random
+                                            # Let's assume pid + offer_title is unique enough for now
+                                            u_id = f"{pid}_{offer.get('id', offer['offer_title'])}"
+                                            
+                                            if u_id in cart_ids:
+                                                if st.button("Usuń", key=f"del_{u_id}"):
+                                                    st.session_state['cart_items'] = [x for x in st.session_state['cart_items'] if x['unique_id'] != u_id]
+                                                    st.rerun()
+                                            else:
+                                                if st.button("Wybierz", key=f"add_{u_id}"):
+                                                    st.session_state['cart_items'].append({
+                                                        "unique_id": u_id,
+                                                        "portal_id": pid,
+                                                        "portal_url": r.get('portal_url'),
+                                                        "portal_name": r.get('name'), # Keep for DB
+                                                        "metrics": {"dr": r.get('portal_score_domain_rating')},
+                                                        "offer": offer,
+                                                        "price": float(offer['best_price'])
+                                                    })
+                                                    st.rerun()
+                                        st.divider()
 
-                    # --- Manual Campaign Creation Form ---
-                    with st.form("manual_create_camp"):
-                        camp_name_input = st.text_input("Nazwa Kampanii", f"Manualna {client_name}")
-                        submit_camp = st.form_submit_button("Utwórz Kampanię z powyższymi ofertami")
-
-                        if submit_camp:
-                            # Calculate total cost based on SELECTED offers
-                            total_cost = 0
-                            final_items = []
-                            
-                            for index, row in sel_rows.iterrows():
-                                r = row['_raw']
-                                p_id = r['id']
-                                
-                                if p_id in selected_offers:
-                                    offer = selected_offers[p_id]
-                                    price = float(offer.get('best_price', 0))
-                                    total_cost += price
-                                    
-                                    final_items.append({
-                                        "wp_portal_id": p_id,
-                                        "portal_name": r['name'],
-                                        "portal_url": r['portal_url'],
-                                        "price": price,
-                                        "metrics": {"dr": r.get('portal_score_domain_rating')},
-                                        "status": "planned",
-                                        "pipeline_status": "planned",
-                                        "offer_title": offer.get('offer_title'),
-                                        "offer_description": offer.get('offer_description'),
-                                        # "offer_id": offer.get('id')
-                                    })
-                            
-                            if final_items:
+                    st.markdown("---") # Row separator
+                
+                # --- CART / CHECKOUT BAR ---
+                if st.session_state['cart_items']:
+                    with st.expander("🛒 Koszyk (Utwórz Kampanię)", expanded=True):
+                        st.write(f"Wybrano: {len(st.session_state['cart_items'])} ofert. Razem: {sum(x['price'] for x in st.session_state['cart_items']):.2f} zł")
+                        
+                        with st.form("create_camp_cart"):
+                            cname = st.text_input("Nazwa Kampanii", f"Manualna {client_name}")
+                            if st.form_submit_button("Utwórz Kampanię"):
+                                total_cost = sum(x['price'] for x in st.session_state['cart_items'])
                                 camp = supabase.table("campaigns").insert({
                                     "client_id": client['id'],
-                                    "name": camp_name_input,
+                                    "name": cname,
                                     "budget_limit": total_cost,
                                     "status": "planned"
                                 }).execute()
-                                
                                 cid = camp.data[0]['id']
-                                for item in final_items:
-                                    item['campaign_id'] = cid
                                 
-                                supabase.table("campaign_items").insert(final_items).execute()
-                                st.success("Gotowe! Utworzono kampanię z wybranymi ofertami.")
-                            else:
-                                st.error("Nie wybrano ofert dla żadnego z zaznaczonych portali.")
+                                db_items = []
+                                for ci in st.session_state['cart_items']:
+                                    o = ci['offer']
+                                    db_items.append({
+                                        "campaign_id": cid,
+                                        "wp_portal_id": ci['portal_id'],
+                                        "portal_name": ci['portal_name'],
+                                        "portal_url": ci['portal_url'],
+                                        "price": ci['price'],
+                                        "metrics": ci['metrics'],
+                                        "status": "planned",
+                                        "pipeline_status": "planned",
+                                        "offer_title": o.get('offer_title'),
+                                        "offer_description": o.get('offer_description')
+                                        # Add offer_id when DB supports it
+                                    })
+                                supabase.table("campaign_items").insert(db_items).execute()
+                                st.success("Kampania utworzona!")
+                                st.session_state['cart_items'] = [] # clear
+                                st.rerun()

@@ -92,17 +92,36 @@ class WhitePressAPI:
             "direction": "desc"
         }
         
-        # Mapowanie filtrów
+        # --- Mapowanie filtrów (Best Effort) ---
+        
+        # Cena
         if filters.get('price_max'): api_filters["filtering[offer_price_max]"] = filters['price_max']
+        if filters.get('price_min'): api_filters["filtering[offer_price_min]"] = filters['price_min']
+        
+        # Metryki SEO
         if filters.get('min_dr'): api_filters["filtering[portal_score_domain_rating]"] = filters['min_dr']
         if filters.get('min_tf'): api_filters["filtering[portal_score_trust_flow]"] = filters['min_tf']
         if filters.get('min_traffic'): api_filters["filtering[portal_unique_users]"] = filters['min_traffic']
+        if filters.get('min_cf'): api_filters["filtering[portal_score_citation_flow]"] = filters['min_cf']
+        if filters.get('min_da'): api_filters["filtering[portal_score_moz_domain_authority]"] = filters['min_da']
         
+        # Tematyka
         if filters.get('categories'): 
             api_filters["filtering[portal_category]"] = ",".join(map(str, filters['categories']))
         
-        if filters.get('dofollow'): 
+        # Typ linku
+        if filters.get('dofollow') == "Tak": 
             api_filters["filtering[offer_dofollow]"] = 1
+        elif filters.get('dofollow') == "Nie":
+             api_filters["filtering[offer_dofollow]"] = 0
+             
+        if filters.get('only_promo'):
+            api_filters["filtering[offer_price_promo]"] = 1
+
+        # Filtry tekstowe (nazwa) - obsługa po stronie API jeśli wspierana
+        # Wiele filtrów z "screenów" może nie mieć bezpośredniego endpointu w prostym listingu,
+        # więc część filtracji może być konieczna client-side, ale API WhitePress jest bogate.
+        # Dodajemy to co pewne.
 
         all_portals = []
         page = 1

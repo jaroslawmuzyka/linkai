@@ -29,23 +29,12 @@ def render(supabase, wp_api):
                 res = st.session_state['browse_res']
                 st.write(f"Wyników: {len(res)}")
 
-                # --- NEW: Selection with Offer Details ---
-                # Instead of just picking a portal, we might want to pick a portal AND an offer.
-                # Since querying offers for ALL portals is expensive (N requests), we probably should allow selecting a portal first to inspect offers.
-                # However, the user asked to see offers "next to" domains or select them.
-                
-                # To balance performance, we keep the main list, and allow expanding details or selecting a "default" offer from the list (which is usually the 'best_price').
-                # User request: "Chciałbym móc wybierać to od razu w moim formularzu obok konkretnej domeny."
-
-                # Implementation: We display the main list. User selects portals.
-                # BELOW the list, for SELECTED portals, we show the offer selector.
-                
                 df_disp = []
                 for r in res:
                     df_disp.append({
                         "Wybierz": False, "Nazwa": r['name'], "URL": r['portal_url'],
                         "Cena (od)": float(r.get('best_price',0)), "DR": r.get('portal_score_domain_rating'),
-                        "id": r['id'], # Keep ID for reference
+                        "id": r['id'], 
                         "_raw": r
                     })
                 
@@ -59,14 +48,12 @@ def render(supabase, wp_api):
                     hide_index=True
                 )
                 
-                # Filter selected
                 sel_rows = edited[edited["Wybierz"]==True]
                 
                 if not sel_rows.empty:
                     st.divider()
                     st.subheader("🛍️ Wybierz Ofertę dla zaznaczonych portali")
                     
-                    # Store selected offers map: portal_id -> selected_offer_obj
                     selected_offers = {}
                     
                     for index, row in sel_rows.iterrows():
@@ -82,20 +69,36 @@ def render(supabase, wp_api):
                                 st.warning("Brak dostępnych ofert.")
                                 continue
 
-                            # Format offers for selectbox
-                            offer_opts = {f"{o['offer_title']} - {o['best_price']} PLN": o for o in offers}
+                            # Enhanced Display Options
+                            offer_opts = {}
+                            for o in offers:
+                                # Build a clear label
+                                promo_text = f" [PROMO {o['promo_discount']}%]" if o.get('promo_discount') else ""
+                                dofollow = "Dofollow" if o.get('offer_dofollow') else "Nofollow"
+                                label = f"{o['offer_title']} | {o['best_price']} PLN | {dofollow}{promo_text}"
+                                offer_opts[label] = o
+
                             
-                            # Default to the one matching 'best_price' if possible
+                            # Default to checking if there is a 'best_price' match or just first
                             default_idx = 0
                             
                             picked_label = st.selectbox(f"Wybierz ofertę dla {r['portal_url']}", list(offer_opts.keys()), key=f"off_{p_id}")
+                            
                             if picked_label:
-                                selected_offers[p_id] = offer_opts[picked_label]
-                                st.caption(f"Opis: {offer_opts[picked_label].get('offer_description', '-')}")
+                                o = offer_opts[picked_label]
+                                selected_offers[p_id] = o
+                                
+                                # Show details
+                                c1, c2 = st.columns(2)
+                                c1.caption(f"Opis: {o.get('offer_description', '-')}")
+                                c2.caption(f"Trwałość: {o.get('offer_persistence_custom') or o.get('offer_persistence')} | Linki: {o.get('offer_allowed_link_types')}")
 
-                    if st.button("Utwórz Kampanię z powyższymi ofertami", type="primary"):
-                        camp_name = st.text_input("Nazwa Kampanii", f"Manualna {client_name}", key="manual_camp_name")
-                        if st.button("Potwierdź Utworzenie"):
+                    # --- Manual Campaign Creation Form ---
+                    with st.form("manual_create_camp"):
+                        camp_name_input = st.text_input("Nazwa Kampanii", f"Manualna {client_name}")
+                        submit_camp = st.form_submit_button("Utwórz Kampanię z powyższymi ofertami")
+
+                        if submit_camp:
                             # Calculate total cost based on SELECTED offers
                             total_cost = 0
                             final_items = []
@@ -106,7 +109,7 @@ def render(supabase, wp_api):
                                 
                                 if p_id in selected_offers:
                                     offer = selected_offers[p_id]
-                                    price = float(offer.get('best_price', 0)) # Or promo_best_price? User sample says best_price.
+                                    price = float(offer.get('best_price', 0))
                                     total_cost += price
                                     
                                     final_items.append({
@@ -117,14 +120,15 @@ def render(supabase, wp_api):
                                         "metrics": {"dr": r.get('portal_score_domain_rating')},
                                         "status": "planned",
                                         "pipeline_status": "planned",
-                                        "offer_title": offer.get('offer_title'),   # Store which offer was chosen
-                                        # "offer_id": offer.get('id') # If we want to store offer ID
+                                        "offer_title": offer.get('offer_title'),
+                                        "offer_description": offer.get('offer_description'),
+                                        # "offer_id": offer.get('id')
                                     })
                             
                             if final_items:
                                 camp = supabase.table("campaigns").insert({
                                     "client_id": client['id'],
-                                    "name": camp_name,
+                                    "name": camp_name_input,
                                     "budget_limit": total_cost,
                                     "status": "planned"
                                 }).execute()
@@ -136,4 +140,4 @@ def render(supabase, wp_api):
                                 supabase.table("campaign_items").insert(final_items).execute()
                                 st.success("Gotowe! Utworzono kampanię z wybranymi ofertami.")
                             else:
-                                st.error("Nie wybrano żadnych ofert.")
+                                st.error("Nie wybrano ofert dla żadnego z zaznaczonych portali.")

@@ -2,77 +2,76 @@ import streamlit as st
 
 #--- HELPERS ---
 def get_option_label(options_dict, key, default="-"):
-"""
-Safely retrieves a label from an options dict (e.g. portal_type) using a string key.
-Handles string/int conversion safely.
-"""
-if options_dict is None: return default
-return str(options_dict.get(str(key), default))
+    """
+    Safely retrieves a label from an options dict (e.g. portal_type) using a string key.
+    Handles string/int conversion safely.
+    """
+    if options_dict is None: return default
+    return str(options_dict.get(str(key), default))
 
 def render_offer_row(offer, u_id, options={}, in_cart=False, show_actions=True):
-"""
-Renders the offer exactly as received from API without translation.
-"""
-# Layout based on typical data density
-cols = st.columns([2, 4, 1, 1, 1, 1])
+    """
+    Renders the offer exactly as received from API without translation.
+    """
+    # Layout based on typical data density
+    cols = st.columns([2, 4, 1, 1, 1, 1])
 
 
-# 1. Title & URL
-with cols[0]:
-    st.markdown(f"**{offer.get('offer_title', 'No Title')}**")
-    if offer.get('offer_url'):
-        st.caption(offer['offer_url'])
+    # 1. Title & URL
+    with cols[0]:
+        st.markdown(f"**{offer.get('offer_title', 'No Title')}**")
+        if offer.get('offer_url'):
+            st.caption(offer['offer_url'])
 
-# 2. Description & Details (Raw)
-with cols[1]:
-    # Basic flags
-    flags = []
-    if offer.get('offer_dofollow') == 1: flags.append("DOFOLLOW")
-    else: flags.append("NOFOLLOW")
-    
-    if offer.get('offer_promoting'):
-         flags.append(f"Promo: {offer['offer_promoting']} days")
-    
-    persistence = offer.get('offer_persistence') # Integer usually
-    flags.append(f"Persistence ID: {persistence}")
+    # 2. Description & Details (Raw)
+    with cols[1]:
+        # Basic flags
+        flags = []
+        if offer.get('offer_dofollow') == 1: flags.append("DOFOLLOW")
+        else: flags.append("NOFOLLOW")
+        
+        if offer.get('offer_promoting'):
+             flags.append(f"Promo: {offer['offer_promoting']} days")
+        
+        persistence = offer.get('offer_persistence') # Integer usually
+        flags.append(f"Persistence ID: {persistence}")
 
-    st.caption(" | ".join(flags))
-    
-    # Expandable Description
-    with st.expander("Description"):
-        st.text(offer.get('offer_description', ''))
-        if offer.get('offer_allowed_link_types'):
-             st.markdown(f"**Link Types:** {offer['offer_allowed_link_types']}")
+        st.caption(" | ".join(flags))
+        
+        # Expandable Description
+        with st.expander("Description"):
+            st.text(offer.get('offer_description', ''))
+            if offer.get('offer_allowed_link_types'):
+                 st.markdown(f"**Link Types:** {offer['offer_allowed_link_types']}")
 
-# 3. Price
-with cols[2]:
-    price = float(offer.get('best_price', 0))
-    st.markdown(f"**{price:.2f}**")
-    if offer.get('promo_discount', 0) > 0:
-         st.caption(f"-{offer['promo_discount']}%")
+    # 3. Price
+    with cols[2]:
+        price = float(offer.get('best_price', 0))
+        st.markdown(f"**{price:.2f}**")
+        if offer.get('promo_discount', 0) > 0:
+             st.caption(f"-{offer['promo_discount']}%")
 
-# 4. Metrics/Tech
-with cols[3]:
-    # Using raw fields from Offer object if available
-    # Offer object usually has basic fields, Portal object has metrics. 
-    # Here we just show what's in the Offer JSON you pasted.
-    req_photo = offer.get('offer_require_photo')
-    st.write(f"Req Photo: {req_photo}")
+    # 4. Metrics/Tech
+    with cols[3]:
+        # Using raw fields from Offer object if available
+        # Offer object usually has basic fields, Portal object has metrics. 
+        # Here we just show what's in the Offer JSON you pasted.
+        req_photo = offer.get('offer_require_photo')
+        st.write(f"Req Photo: {req_photo}")
 
-# 5. Tagging
-with cols[4]:
-    st.write(f"Tagging ID: {offer.get('offer_tagging')}")
+    # 5. Tagging
+    with cols[4]:
+        st.write(f"Tagging ID: {offer.get('offer_tagging')}")
 
-# 6. Action
-with cols[5]:
-    if show_actions:
-        if in_cart:
-            if st.button("Remove", key=f"del_{u_id}", type="secondary"):
-                return "REMOVE"
-        else:
-            if st.button("Select", key=f"add_{u_id}", type="primary"):
-                return "ADD"
-
+    # 6. Action
+    with cols[5]:
+        if show_actions:
+            if in_cart:
+                if st.button("Remove", key=f"del_{u_id}", type="secondary"):
+                    return "REMOVE"
+            else:
+                if st.button("Select", key=f"add_{u_id}", type="primary"):
+                    return "ADD"
 
 def render_filters_form(options):
     """

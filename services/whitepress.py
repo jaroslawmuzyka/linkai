@@ -11,7 +11,7 @@ class WhitePressAPI:
             "Authorization": f"Bearer {self.api_key}"
         }
 
- def _request(self, endpoint, params=None, method="GET"):
+    def _request(self, endpoint, params=None, method="GET"):
         """Wykonuje zapytanie do API z Rate Limitingiem (1.1s)."""
         url = f"{self.base_url}{endpoint}"
         

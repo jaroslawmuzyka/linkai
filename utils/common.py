@@ -75,14 +75,6 @@ with cols[5]:
 return None
 
 def render_filters_form(options):
-"""
-Generates filters based on the 'options' dictionary provided by the API.
-"""
-filters = {}
-
-st.subheader("Filters")
-
-with st.expander("Search Parameters", expanded=True):
     """
     Generates filters based on the 'options' dictionary provided by the API.
     """
@@ -112,12 +104,8 @@ with st.expander("Search Parameters", expanded=True):
             sel_country = st.selectbox("Country", country_choices, index=idx_c, format_func=lambda x: x[1])
             filters['portal_country'] = sel_country[0]
             
-            # Portal Region (if Poland or just list it)
+            # Portal Region
             reg_opts = options.get('portal_region', {})
-            # Region values are dicts in JSON? "1": {"label": "Dolnośląskie", "country": 161}
-            # We need to handle that structure or simple KV.
-            # User JSON: "1": {"label": "Dolnośląskie", "country": 161}
-            # Helper to extract label
             reg_choices = [("All", "All")]
             for k, v in reg_opts.items():
                 lab = v.get('label', str(v)) if isinstance(v, dict) else str(v)
@@ -155,33 +143,32 @@ with st.expander("Search Parameters", expanded=True):
             # Dofollow
             dof_map = {"All": None, "Yes (1)": "1", "No (0)": "0"}
             dof_sel = st.selectbox("Dofollow", list(dof_map.keys()))
-            filters['offer_dofollow'] = dof_map[dof_sel] # Changed key to match API
+            filters['offer_dofollow'] = dof_map[dof_sel]
             
             filters['only_promo'] = st.checkbox("Only Promo Offers")
 
-        # --- Row 2: Offers Specifics ---
-        with st.expander("Offer Details Filters"):
-            r2c1, r2c2, r2c3 = st.columns(3)
-            with r2c1:
-                # Link Type
-                lt_opts = options.get('offer_link_type', {})
-                lt_choices = [("All", "All")] + [(k, v) for k, v in lt_opts.items()]
-                sel_lt = st.selectbox("Link Type", lt_choices, format_func=lambda x: x[1])
-                filters['offer_link_type'] = sel_lt[0]
-                
-            with r2c2:
-                # Persistence
-                per_opts = options.get('offer_persistence', {})
-                per_choices = [("All", "All")] + [(k, v) for k, v in per_opts.items()]
-                sel_per = st.selectbox("Persistence", per_choices, format_func=lambda x: x[1])
-                filters['offer_persistence'] = sel_per[0]
-                
-            with r2c3:
-                # Tagging
-                tag_opts = options.get('offer_tagging', {})
-                tag_choices = [("All", "All")] + [(k, v) for k, v in tag_opts.items()]
-                sel_tag = st.selectbox("Article Marking", tag_choices, format_func=lambda x: x[1])
-                filters['offer_tagging'] = sel_tag[0]
+    # --- Row 2: Offers Specifics ---
+    with st.expander("Offer Details Filters"):
+        r2c1, r2c2, r2c3 = st.columns(3)
+        with r2c1:
+            # Link Type
+            lt_opts = options.get('offer_link_type', {})
+            lt_choices = [("All", "All")] + [(k, v) for k, v in lt_opts.items()]
+            sel_lt = st.selectbox("Link Type", lt_choices, format_func=lambda x: x[1])
+            filters['offer_link_type'] = sel_lt[0]
+            
+        with r2c2:
+            # Persistence
+            per_opts = options.get('offer_persistence', {})
+            per_choices = [("All", "All")] + [(k, v) for k, v in per_opts.items()]
+            sel_per = st.selectbox("Persistence", per_choices, format_func=lambda x: x[1])
+            filters['offer_persistence'] = sel_per[0]
+            
+        with r2c3:
+            # Tagging
+            tag_opts = options.get('offer_tagging', {})
+            tag_choices = [("All", "All")] + [(k, v) for k, v in tag_opts.items()]
+            sel_tag = st.selectbox("Article Marking", tag_choices, format_func=lambda x: x[1])
+            filters['offer_tagging'] = sel_tag[0]
 
     return filters
-```

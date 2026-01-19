@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils.common import render_filters_form, translate_offer_title, render_offer_row
+from utils.common import render_filters_form, render_offer_row
 
 def render(supabase, wp_api):
 st.title("Campaign Generator")
@@ -166,7 +166,7 @@ st.title("Campaign Generator")
                     else:
                         offer_opts = {}
                         for o in offers:
-                            label = f"{translate_offer_title(o['offer_title'])} ({o['best_price']} zł)"
+                            label = f"{o['offer_title']} ({o['best_price']} zł)"
                             offer_opts[label] = o
                         
                         # Heuristic: Pick lowest price if not set, or maintain selection?
@@ -184,7 +184,7 @@ st.title("Campaign Generator")
                         # We use 'render_offer_row' but maybe without 'Wybierz' button since the dropdown controls selection?
                         # Or we show button as active "Selected"?
                         # 'show_actions=False' hides the button.
-                        render_offer_row(sel_o, u_id="dummy", in_cart=False, show_actions=False)
+                        render_offer_row(sel_o, u_id="dummy", options=options, in_cart=False, show_actions=False)
 
                 # Add to final list
                 final_item = item.copy()

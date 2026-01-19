@@ -75,43 +75,23 @@ class WhitePressAPI:
         if filters.get('min_traffic'): api_filters["filtering[portal_unique_users]"] = filters['min_traffic']
         
         if filters.get('categories'): 
-            # API expects comma-separated categories if multiple
             api_filters["filtering[portal_category]"] = ",".join(map(str, filters['categories']))
         
-        if filters.get('dofollow') == "Tak": api_filters["filtering[offer_dofollow]"] = 1
-        elif filters.get('dofollow') == "Nie": api_filters["filtering[offer_dofollow]"] = 0
+        if filters.get('offer_dofollow'): api_filters["filtering[offer_dofollow]"] = filters['offer_dofollow']
              
-        if filters.get('only_promo'): api_filters["filtering[offer_promo]"] = 1 # Swagger says offer_promo, not offer_price_promo
+        if filters.get('only_promo'): api_filters["filtering[offer_promo]"] = 1
 
         # --- Ext. Filters Mapping ---
-        if filters.get('region') and filters['region'] != "Wszystkie": api_filters["filtering[portal_region]"] = filters['region']
-        if filters.get('country') and filters['country'] != "Polska (domyślny)": api_filters["filtering[portal_country]"] = filters['country']
-        if filters.get('keywords'): api_filters["filtering[portal]"] = filters['keywords']
+        if filters.get('portal_url'): api_filters["filtering[portal]"] = filters['portal_url']
         
-        # Type enum mapping might be needed if UI sends "Portal" but API wants ID. 
-        # Assuming UI options match API string/id or close enough.
-        # But UI has "Wszystkie", "Portal", "Blog"...
-        # Swagger options: portal_type: ["string"] - likely IDs or keys.
-        # Without exact ID mapping from OPTIONS, we might send raw if it works, or skip.
-        # Check if 'opts' were passed to filters? - Yes in View. But here in Service we just have dict.
-        # We will try sending if not "Wszystkie"
-        if filters.get('type') and filters['type'] != "Wszystkie": api_filters["filtering[portal_type]"] = filters['type']
+        if filters.get('portal_type') and filters['portal_type'] != "All": api_filters["filtering[portal_type]"] = filters['portal_type']
+        if filters.get('portal_country') and filters['portal_country'] != "All": api_filters["filtering[portal_country]"] = filters['portal_country']
+        if filters.get('portal_region') and filters['portal_region'] != "All": api_filters["filtering[portal_region]"] = filters['portal_region']
+        if filters.get('portal_quality') and filters['portal_quality'] != "All": api_filters["filtering[portal_quality]"] = filters['portal_quality']
 
-        if filters.get('link_type') and filters['link_type'] != "Wszystkie": api_filters["filtering[offer_link_type]"] = filters['link_type']
-        if filters.get('article_marking') and filters['article_marking'] != "Wszystkie": api_filters["filtering[offer_tagging]"] = filters['article_marking']
-
-        if filters.get('min_content_grade'): api_filters["filtering[portal_score_content]"] = filters['min_content_grade']
-        if filters.get('min_tech_grade'): api_filters["filtering[portal_score_technical]"] = filters['min_tech_grade']
-        if filters.get('tracking_traffic'): api_filters["filtering[portal_tracking]"] = 1
-        
-        if filters.get('promo_duration'): api_filters["filtering[offer_promoting]"] = filters['promo_duration']
-        if filters.get('persistence') and filters['persistence'] != "Wszystkie": api_filters["filtering[offer_persistence]"] = filters['persistence']
-
-        if filters.get('min_senuto'): api_filters["filtering[portal_visibility_senuto]"] = filters['min_senuto']
-        if filters.get('min_semstorm'): api_filters["filtering[portal_visibility_semstorm]"] = filters['min_semstorm']
-        if filters.get('min_semrush'): api_filters["filtering[portal_visibility_semrush]"] = filters['min_semrush']
-        if filters.get('min_ahrefs_traffic'): api_filters["filtering[portal_visibility_ahrefs]"] = filters['min_ahrefs_traffic']
-        if filters.get('min_pr'): api_filters["filtering[portal_score_page_rating]"] = filters['min_pr']
+        if filters.get('offer_link_type') and filters['offer_link_type'] != "All": api_filters["filtering[offer_link_type]"] = filters['offer_link_type']
+        if filters.get('offer_persistence') and filters['offer_persistence'] != "All": api_filters["filtering[offer_persistence]"] = filters['offer_persistence']
+        if filters.get('offer_tagging') and filters['offer_tagging'] != "All": api_filters["filtering[offer_tagging]"] = filters['offer_tagging']
 
         # Request
         data = self._request(f"/v1/seeding/{project_id}/portals", api_filters)

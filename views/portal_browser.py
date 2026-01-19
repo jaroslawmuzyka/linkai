@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from utils.common import render_filters_form, render_offer_row
+from utils.common import render_filters_form, render_offer_row, get_option_label
+
 
 def render(supabase, wp_api):
     st.title("Przeglądarka Portali")
@@ -115,7 +116,7 @@ if client_name:
                     u_id = f"{pid}_{offer.get('id')}"
                     in_cart = u_id in [x['unique_id'] for x in st.session_state['cart_items']]
                     
-                    action = render_offer_row(offer, u_id, in_cart, show_actions=True)
+                    action = render_offer_row(offer, u_id, options=opts, in_cart=in_cart, show_actions=True)
                     
                     if action == "ADD":
                         st.session_state['cart_items'].append({

@@ -72,7 +72,7 @@ with cols[5]:
         else:
             if st.button("Select", key=f"add_{u_id}", type="primary"):
                 return "ADD"
-return None
+
 
 def render_filters_form(options):
     """

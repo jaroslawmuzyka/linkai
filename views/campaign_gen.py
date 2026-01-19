@@ -4,9 +4,9 @@ from datetime import datetime
 from utils.common import render_filters_form, render_offer_row
 
 def render(supabase, wp_api):
-st.title("Campaign Generator")
+    st.title("Campaign Generator")
     
-     if not supabase: st.stop()
+    if not supabase: st.stop()
         
     clients_resp = supabase.table("clients").select("id, name, wp_project_id").execute()
     clients_map = {c['name']: c for c in clients_resp.data} if clients_resp.data else {}
